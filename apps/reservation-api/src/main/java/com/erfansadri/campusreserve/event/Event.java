@@ -101,4 +101,24 @@ public class Event {
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
+
+    public boolean hasAvailableCapacity() {
+        return remainingCapacity > 0;
+    }
+
+    public void reserveSpot() {
+        if (!hasAvailableCapacity()) {
+            throw new IllegalStateException("Event has no remaining capacity.");
+        }
+
+        remainingCapacity--;
+    }
+
+    public void releaseSpot() {
+        if (remainingCapacity >= capacity) {
+            throw new IllegalStateException("Event capacity is already fully available.");
+        }
+
+        remainingCapacity++;
+    }
 }
