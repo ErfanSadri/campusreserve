@@ -37,8 +37,8 @@ public class ReservationService {
             Long eventId,
             CreateReservationRequest request) {
 
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new EventNotFoundException(eventId));
+        Event event = eventRepository.findByIdForUpdate(eventId)
+            .orElseThrow(() -> new EventNotFoundException(eventId));
 
         OffsetDateTime now = OffsetDateTime.now();
 
