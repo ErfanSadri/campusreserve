@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
 @RequestMapping("/api")
@@ -25,10 +26,16 @@ public class ReservationController {
     @ResponseStatus(HttpStatus.CREATED)
     public ReservationResponse createHold(
             @PathVariable Long eventId,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+                    String idempotencyKey,
             @Valid @RequestBody CreateReservationRequest request) {
 
-        return reservationService.createHold(eventId, request);
+        return reservationService.createHold(
+                eventId,
+                idempotencyKey,
+                request);
     }
+
 
     @GetMapping("/reservations/{reservationId}")
     public ReservationResponse getReservation(

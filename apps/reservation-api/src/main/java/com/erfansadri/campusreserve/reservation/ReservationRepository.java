@@ -11,4 +11,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             Long eventId,
             String attendeeEmail,
             Collection<ReservationStatus> statuses);
+
+    Optional<Reservation> findByEvent_IdAndIdempotencyKey(
+        Long eventId,
+        String idempotencyKey);
 }
