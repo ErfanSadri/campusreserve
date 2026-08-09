@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,9 @@ class EventServiceTests {
 
     @Mock
     private EventRepository eventRepository;
+
+    @Mock
+    private EventCache eventCache;
 
     @InjectMocks
     private EventService eventService;
@@ -112,11 +116,62 @@ class EventServiceTests {
 
     @Test
     void throwsWhenEventDoesNotExist() {
+        when(eventCache.get(999L)).thenReturn(Optional.empty());
         when(eventRepository.findById(999L))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> eventService.getEvent(999L))
                 .isInstanceOf(EventNotFoundException.class)
                 .hasMessage("Event 999 was not found.");
+
+        verify(eventCache, never()).put(any(EventResponse.class));
+    }
+
+    @Test
+    void readsEventFromPostgreSqlOnCacheMissThenUsesCachedResponse() {
+        Event event = new Event(
+                "Cached Event",
+                null,
+                "UCSD",
+                OffsetDateTime.now().plusDays(2),
+                OffsetDateTime.now().minusDays(1),
+                10);
+
+        EventResponse cachedResponse = EventResponse.from(event);
+        AtomicInteger cacheLookups = new AtomicInteger();
+
+        when(eventCache.get(1L))
+                .thenAnswer(invocation -> cacheLookups.getAndIncrement() == 0
+                        ? Optional.<EventResponse>empty()
+                        : Optional.of(cachedResponse));
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+
+        EventResponse first = eventService.getEvent(1L);
+        EventResponse second = eventService.getEvent(1L);
+
+        assertThat(first).isEqualTo(cachedResponse);
+        assertThat(second).isEqualTo(cachedResponse);
+        verify(eventRepository).findById(1L);
+        verify(eventCache).put(cachedResponse);
+    }
+
+    @Test
+    void fallsBackToPostgreSqlWhenCacheLookupFails() {
+        Event event = new Event(
+                "Fallback Event",
+                null,
+                "UCSD",
+                OffsetDateTime.now().plusDays(2),
+                OffsetDateTime.now().minusDays(1),
+                10);
+
+        when(eventCache.get(1L))
+                .thenThrow(new RuntimeException("Redis is unavailable"));
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+
+        EventResponse response = eventService.getEvent(1L);
+
+        assertThat(response.title()).isEqualTo("Fallback Event");
+        verify(eventRepository).findById(1L);
     }
 }

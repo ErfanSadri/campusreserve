@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.erfansadri.campusreserve.event.Event;
+import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
 
@@ -31,6 +32,9 @@ class ReservationServiceTests {
 
     @Mock
     private EventRepository eventRepository;
+
+    @Mock
+    private EventCache eventCache;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -81,6 +85,7 @@ class ReservationServiceTests {
                 ArgumentCaptor.forClass(Reservation.class);
 
         verify(reservationRepository).save(captor.capture());
+        verify(eventCache).evict(1L);
 
         assertThat(captor.getValue().getAttendeeName())
                 .isEqualTo("Test Student");
@@ -313,6 +318,8 @@ class ReservationServiceTests {
                 .isEqualTo(ReservationStatus.CANCELLED);
 
         assertThat(event.getRemainingCapacity()).isEqualTo(10);
+
+        verify(eventCache).evict(event.getId());
     }
 
     @Test
@@ -396,6 +403,7 @@ class ReservationServiceTests {
 
         verify(reservationRepository, never())
                 .save(any(Reservation.class));
+        verify(eventCache, never()).evict(any());
     }
 
     @Test

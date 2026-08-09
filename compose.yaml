@@ -15,5 +15,19 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7.4.2-alpine
+    command: redis-server --appendonly yes --save 60 1
+    ports:
+      - "127.0.0.1:${CAMPUSRESERVE_REDIS_PORT:-6380}:6379"
+    volumes:
+      - campusreserve-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   campusreserve-postgres-data:
+  campusreserve-redis-data:
