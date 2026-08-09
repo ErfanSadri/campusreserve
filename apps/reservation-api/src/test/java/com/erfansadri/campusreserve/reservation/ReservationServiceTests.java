@@ -39,7 +39,7 @@ class ReservationServiceTests {
     void createsTenMinuteHoldAndDecrementsCapacity() {
         Event event = openEvent(10);
 
-        when(eventRepository.findById(1L))
+        when(eventRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(event));
 
         when(reservationRepository
@@ -99,7 +99,7 @@ class ReservationServiceTests {
                 "student@example.com",
                 OffsetDateTime.now().plusMinutes(5));
 
-        when(eventRepository.findById(1L))
+        when(eventRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(event));
 
         when(reservationRepository
@@ -131,7 +131,7 @@ class ReservationServiceTests {
         Event event = openEvent(1);
         event.reserveSpot();
 
-        when(eventRepository.findById(1L))
+        when(eventRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(event));
 
         when(reservationRepository
@@ -169,7 +169,7 @@ class ReservationServiceTests {
                 now.plusDays(2),
                 50);
 
-        when(eventRepository.findById(1L))
+        when(eventRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(event));
 
         CreateReservationRequest request =
@@ -198,7 +198,7 @@ class ReservationServiceTests {
                 now.minusDays(5),
                 50);
 
-        when(eventRepository.findById(1L))
+        when(eventRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(event));
 
         CreateReservationRequest request =
@@ -217,7 +217,7 @@ class ReservationServiceTests {
 
     @Test
     void throwsWhenEventDoesNotExist() {
-        when(eventRepository.findById(999L))
+        when(eventRepository.findByIdForUpdate(999L))
                 .thenReturn(Optional.empty());
 
         CreateReservationRequest request =
