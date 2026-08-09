@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 
 import com.erfansadri.campusreserve.event.Event;
+import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
 
@@ -24,12 +25,15 @@ public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final EventRepository eventRepository;
+    private final EventCache eventCache;
 
     public ReservationService(
             ReservationRepository reservationRepository,
-            EventRepository eventRepository) {
+            EventRepository eventRepository,
+            EventCache eventCache) {
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
+        this.eventCache = eventCache;
     }
 
     @Transactional
@@ -118,6 +122,8 @@ public class ReservationService {
         Reservation saved =
                 reservationRepository.save(reservation);
 
+        evictEventCache(eventId);
+
         return ReservationResponse.from(saved);
     }
 
@@ -155,7 +161,16 @@ public class ReservationService {
 
         reservation.cancel();
         reservation.getEvent().releaseSpot();
+        evictEventCache(reservation.getEvent().getId());
 
         return ReservationResponse.from(reservation);
+    }
+
+    private void evictEventCache(Long eventId) {
+        try {
+            eventCache.evict(eventId);
+        } catch (RuntimeException exception) {
+            // PostgreSQL has already applied the reservation change.
+        }
     }
 }
