@@ -29,11 +29,13 @@ class ReservationControllerTests {
     @Test
     void createsReservationHold() throws Exception {
         when(reservationService.createHold(
-                eq(78L),
-                any(CreateReservationRequest.class)))
+            eq(78L),
+            eq("test-key"),
+            any(CreateReservationRequest.class)))
                 .thenReturn(heldResponse());
 
         mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", "test-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -99,11 +101,13 @@ class ReservationControllerTests {
     @Test
     void returns409ForDuplicateReservation() throws Exception {
         when(reservationService.createHold(
-                eq(78L),
-                any(CreateReservationRequest.class)))
+            eq(78L),
+            eq("test-key"),
+            any(CreateReservationRequest.class)))
                 .thenThrow(new DuplicateReservationException());
 
         mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", "test-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -119,12 +123,14 @@ class ReservationControllerTests {
     @Test
     void returns409WhenReservationUnavailable() throws Exception {
         when(reservationService.createHold(
-                eq(78L),
-                any(CreateReservationRequest.class)))
+            eq(78L),
+            eq("test-key"),
+            any(CreateReservationRequest.class)))
                 .thenThrow(new ReservationUnavailableException(
                         "Event has no remaining capacity."));
 
         mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", "test-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -152,6 +158,7 @@ class ReservationControllerTests {
     @Test
     void rejectsInvalidReservationRequest() throws Exception {
         mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", "test-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -160,6 +167,72 @@ class ReservationControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsMissingIdempotencyKey() throws Exception {
+        when(reservationService.createHold(
+                eq(78L),
+                eq(null),
+                any(CreateReservationRequest.class)))
+                .thenThrow(new InvalidIdempotencyKeyException());
+
+        mockMvc.perform(post("/api/events/78/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "attendeeName": "Test Student",
+                                  "attendeeEmail": "student@example.com"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value("Idempotency-Key must contain between 1 and 128 characters."));
+    }
+
+    @Test
+    void rejectsInvalidIdempotencyKey() throws Exception {
+        when(reservationService.createHold(
+                eq(78L),
+                eq(" "),
+                any(CreateReservationRequest.class)))
+                .thenThrow(new InvalidIdempotencyKeyException());
+
+        mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", " ")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "attendeeName": "Test Student",
+                                  "attendeeEmail": "student@example.com"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value("Idempotency-Key must contain between 1 and 128 characters."));
+    }
+
+    @Test
+    void returns409ForIdempotencyKeyReusedWithDifferentRequest()
+            throws Exception {
+        when(reservationService.createHold(
+                eq(78L),
+                eq("test-key"),
+                any(CreateReservationRequest.class)))
+                .thenThrow(new IdempotencyConflictException());
+
+        mockMvc.perform(post("/api/events/78/reservations")
+                        .header("Idempotency-Key", "test-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "attendeeName": "Test Student",
+                                  "attendeeEmail": "student@example.com"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error")
+                        .value("Idempotency key was already used with a different request."));
     }
 
     private ReservationResponse heldResponse() {

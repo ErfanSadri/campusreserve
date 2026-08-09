@@ -28,9 +28,10 @@ public class ReservationExceptionHandler {
                 .body(Map.of("error", exception.getMessage()));
     }
 
-    @ExceptionHandler({
+   @ExceptionHandler({
             ReservationUnavailableException.class,
-            InvalidReservationStateException.class
+            InvalidReservationStateException.class,
+            IdempotencyConflictException.class
     })
     public ResponseEntity<Map<String, String>> handleReservationConflict(
             RuntimeException exception) {
@@ -39,4 +40,14 @@ public class ReservationExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(Map.of("error", exception.getMessage()));
     }
+
+    @ExceptionHandler(InvalidIdempotencyKeyException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidIdempotencyKey(
+            InvalidIdempotencyKeyException exception) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of("error", exception.getMessage()));
+    }
+
 }

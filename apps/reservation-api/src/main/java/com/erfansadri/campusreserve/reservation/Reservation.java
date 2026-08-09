@@ -18,6 +18,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "reservations")
 public class Reservation {
@@ -43,6 +46,16 @@ public class Reservation {
     @Column(name = "held_until")
     private OffsetDateTime heldUntil;
 
+    @Column(name = "idempotency_key", length = 128)
+    private String idempotencyKey;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(
+            name = "request_fingerprint",
+            length = 64,
+            columnDefinition = "CHAR(64)")
+    private String requestFingerprint;
+
     @Generated
     @Column(
             name = "created_at",
@@ -63,12 +76,38 @@ public class Reservation {
             String attendeeName,
             String attendeeEmail,
             OffsetDateTime heldUntil) {
+        this(
+                event,
+                attendeeName,
+                attendeeEmail,
+                heldUntil,
+                null,
+                null);
+    }
+
+    public Reservation(
+            Event event,
+            String attendeeName,
+            String attendeeEmail,
+            OffsetDateTime heldUntil,
+            String idempotencyKey,
+            String requestFingerprint) {
         this.event = event;
         this.attendeeName = attendeeName;
         this.attendeeEmail = attendeeEmail;
         this.status = ReservationStatus.HELD;
         this.heldUntil = heldUntil;
+        this.idempotencyKey = idempotencyKey;
+        this.requestFingerprint = requestFingerprint;
         this.updatedAt = OffsetDateTime.now();
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getRequestFingerprint() {
+        return requestFingerprint;
     }
 
     public Long getId() {

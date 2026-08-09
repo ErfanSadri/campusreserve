@@ -70,11 +70,11 @@ class ReservationConcurrencyTests {
 
                     try {
                         reservationService.createHold(
-                                eventId,
-                                new CreateReservationRequest(
-                                        "Student " + studentNumber,
-                                        "student" + studentNumber
-                                                + "@example.com"));
+                            eventId,
+                            "concurrency-" + studentNumber,
+                            new CreateReservationRequest(
+                                    "Student " + studentNumber,
+                                    "student" + studentNumber + "@example.com"));
 
                         return true;
                     } catch (ReservationUnavailableException exception) {
@@ -165,11 +165,11 @@ class ReservationConcurrencyTests {
 
                     try {
                         reservationService.createHold(
-                                eventId,
-                                new CreateReservationRequest(
-                                        "Load Student " + studentNumber,
-                                        "load-student" + studentNumber
-                                                + "@example.com"));
+                            eventId,
+                            "load-" + studentNumber,
+                            new CreateReservationRequest(
+                                    "Load Student " + studentNumber,
+                                    "load-student" + studentNumber + "@example.com"));
 
                         return true;
                     } catch (ReservationUnavailableException exception) {
@@ -222,6 +222,69 @@ class ReservationConcurrencyTests {
             jdbcTemplate.update(
                     "DELETE FROM events WHERE id = ?",
                     eventId);
+        }
+    }
+
+    @Test
+    void replaysConcurrentRequestsWithTheSameKeyWithoutUsingExtraCapacity()
+            throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+
+        Event event = eventRepository.saveAndFlush(new Event(
+                "Idempotent Concurrency Event",
+                null,
+                "UCSD",
+                now.plusDays(5),
+                now.minusDays(1),
+                1));
+
+        Long eventId = event.getId();
+        int attempts = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(attempts);
+        CountDownLatch ready = new CountDownLatch(attempts);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<ReservationResponse>> futures = new ArrayList<>();
+
+        try {
+            for (int i = 0; i < attempts; i++) {
+                futures.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return reservationService.createHold(
+                            eventId,
+                            "shared-request-key",
+                            new CreateReservationRequest(
+                                    "Test Student",
+                                    "student@example.com"));
+                }));
+            }
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            List<Long> reservationIds = new ArrayList<>();
+            for (Future<ReservationResponse> future : futures) {
+                reservationIds.add(future.get(30, TimeUnit.SECONDS).id());
+            }
+
+            Event reloaded = eventRepository.findById(eventId).orElseThrow();
+            Integer activeReservations = jdbcTemplate.queryForObject(
+                    """
+                    SELECT COUNT(*)
+                    FROM reservations
+                    WHERE event_id = ?
+                      AND status IN ('HELD', 'CONFIRMED')
+                    """,
+                    Integer.class,
+                    eventId);
+
+            assertThat(reservationIds).hasSize(attempts).containsOnly(reservationIds.getFirst());
+            assertThat(activeReservations).isEqualTo(1);
+            assertThat(reloaded.getRemainingCapacity()).isZero();
+        } finally {
+            executor.shutdownNow();
+            jdbcTemplate.update("DELETE FROM reservations WHERE event_id = ?", eventId);
+            jdbcTemplate.update("DELETE FROM events WHERE id = ?", eventId);
         }
     }
 }

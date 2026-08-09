@@ -35,10 +35,47 @@ public class ReservationService {
     @Transactional
     public ReservationResponse createHold(
             Long eventId,
+            String idempotencyKey,
             CreateReservationRequest request) {
 
+        if (idempotencyKey == null
+                || idempotencyKey.trim().isEmpty()
+                || idempotencyKey.trim().length() > 128) {
+            throw new InvalidIdempotencyKeyException();
+        }
+
+        String normalizedKey = idempotencyKey.trim();
+
         Event event = eventRepository.findByIdForUpdate(eventId)
-            .orElseThrow(() -> new EventNotFoundException(eventId));
+                .orElseThrow(() -> new EventNotFoundException(eventId));
+
+        String normalizedName = request.attendeeName().trim();
+
+        String normalizedEmail = request.attendeeEmail()
+                .trim()
+                .toLowerCase(Locale.ROOT);
+
+        String requestFingerprint =
+                ReservationRequestFingerprint.create(
+                        eventId,
+                        normalizedName,
+                        normalizedEmail);
+
+        var existingReservation = reservationRepository
+                .findByEvent_IdAndIdempotencyKey(
+                        eventId,
+                        normalizedKey);
+
+        if (existingReservation.isPresent()) {
+            Reservation existing = existingReservation.orElseThrow();
+
+            if (!existing.getRequestFingerprint()
+                    .equals(requestFingerprint)) {
+                throw new IdempotencyConflictException();
+            }
+
+            return ReservationResponse.from(existing);
+        }
 
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -51,10 +88,6 @@ public class ReservationService {
             throw new ReservationUnavailableException(
                     "Registration is closed for this event.");
         }
-
-        String normalizedEmail = request.attendeeEmail()
-                .trim()
-                .toLowerCase(Locale.ROOT);
 
         boolean alreadyReserved = reservationRepository
                 .findByEvent_IdAndAttendeeEmailIgnoreCaseAndStatusIn(
@@ -76,11 +109,14 @@ public class ReservationService {
 
         Reservation reservation = new Reservation(
                 event,
-                request.attendeeName().trim(),
+                normalizedName,
                 normalizedEmail,
-                now.plus(HOLD_DURATION));
+                now.plus(HOLD_DURATION),
+                normalizedKey,
+                requestFingerprint);
 
-        Reservation saved = reservationRepository.save(reservation);
+        Reservation saved =
+                reservationRepository.save(reservation);
 
         return ReservationResponse.from(saved);
     }

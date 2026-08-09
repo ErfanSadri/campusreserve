@@ -60,7 +60,7 @@ class ReservationServiceTests {
         OffsetDateTime before = OffsetDateTime.now();
 
         ReservationResponse response =
-                reservationService.createHold(1L, request);
+                reservationService.createHold(1L,"test-key",request);
 
         OffsetDateTime after = OffsetDateTime.now();
 
@@ -115,7 +115,7 @@ class ReservationServiceTests {
                         "student@example.com");
 
         assertThatThrownBy(
-                () -> reservationService.createHold(1L, request))
+                () -> reservationService.createHold(1L,"test-key",request))
                 .isInstanceOf(DuplicateReservationException.class)
                 .hasMessage(
                         "Attendee already has an active reservation for this event.");
@@ -147,7 +147,7 @@ class ReservationServiceTests {
                         "student@example.com");
 
         assertThatThrownBy(
-                () -> reservationService.createHold(1L, request))
+                () -> reservationService.createHold(1L,"test-key",request))
                 .isInstanceOf(ReservationUnavailableException.class)
                 .hasMessage("Event has no remaining capacity.");
 
@@ -178,7 +178,7 @@ class ReservationServiceTests {
                         "student@example.com");
 
         assertThatThrownBy(
-                () -> reservationService.createHold(1L, request))
+                () -> reservationService.createHold(1L,"test-key",request))
                 .isInstanceOf(ReservationUnavailableException.class)
                 .hasMessage("Registration is not open yet.");
 
@@ -207,7 +207,7 @@ class ReservationServiceTests {
                         "student@example.com");
 
         assertThatThrownBy(
-                () -> reservationService.createHold(1L, request))
+                () -> reservationService.createHold(1L,"test-key",request))
                 .isInstanceOf(ReservationUnavailableException.class)
                 .hasMessage("Registration is closed for this event.");
 
@@ -226,7 +226,7 @@ class ReservationServiceTests {
                         "student@example.com");
 
         assertThatThrownBy(
-                () -> reservationService.createHold(999L, request))
+                () -> reservationService.createHold(999L,"test-key",request))
                 .isInstanceOf(EventNotFoundException.class)
                 .hasMessage("Event 999 was not found.");
 
@@ -347,5 +347,133 @@ class ReservationServiceTests {
                 () -> reservationService.getReservation(999L))
                 .isInstanceOf(ReservationNotFoundException.class)
                 .hasMessage("Reservation 999 was not found.");
+    }
+
+    @Test
+    void returnsExistingReservationForRepeatedIdempotentRequest() {
+        Event event = openEvent(10);
+        event.reserveSpot();
+
+        CreateReservationRequest request =
+                new CreateReservationRequest(
+                        "Test Student",
+                        "student@example.com");
+
+        String fingerprint =
+                ReservationRequestFingerprint.create(
+                        1L,
+                        "Test Student",
+                        "student@example.com");
+
+        Reservation existing = new Reservation(
+                event,
+                "Test Student",
+                "student@example.com",
+                OffsetDateTime.now().plusMinutes(10),
+                "request-123",
+                fingerprint);
+
+        when(eventRepository.findByIdForUpdate(1L))
+                .thenReturn(Optional.of(event));
+
+        when(reservationRepository
+                .findByEvent_IdAndIdempotencyKey(
+                        1L,
+                        "request-123"))
+                .thenReturn(Optional.of(existing));
+
+        ReservationResponse response =
+                reservationService.createHold(
+                        1L,
+                        "request-123",
+                        request);
+
+        assertThat(response.status())
+                .isEqualTo(ReservationStatus.HELD);
+
+        assertThat(event.getRemainingCapacity())
+                .isEqualTo(9);
+
+        verify(reservationRepository, never())
+                .save(any(Reservation.class));
+    }
+
+    @Test
+    void rejectsMissingIdempotencyKeyBeforeAccessingPersistence() {
+        CreateReservationRequest request =
+                new CreateReservationRequest(
+                        "Test Student",
+                        "student@example.com");
+
+        assertThatThrownBy(
+                () -> reservationService.createHold(1L, null, request))
+                .isInstanceOf(InvalidIdempotencyKeyException.class)
+                .hasMessage("Idempotency-Key must contain between 1 and 128 characters.");
+
+        verify(eventRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void rejectsOversizedIdempotencyKeyBeforeAccessingPersistence() {
+        CreateReservationRequest request =
+                new CreateReservationRequest(
+                        "Test Student",
+                        "student@example.com");
+
+        assertThatThrownBy(
+                () -> reservationService.createHold(1L, "x".repeat(129), request))
+                .isInstanceOf(InvalidIdempotencyKeyException.class)
+                .hasMessage("Idempotency-Key must contain between 1 and 128 characters.");
+
+        verify(eventRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void rejectsIdempotencyKeyReusedWithDifferentRequest() {
+        Event event = openEvent(10);
+        event.reserveSpot();
+
+        String originalFingerprint =
+                ReservationRequestFingerprint.create(
+                        1L,
+                        "Original Student",
+                        "original@example.com");
+
+        Reservation existing = new Reservation(
+                event,
+                "Original Student",
+                "original@example.com",
+                OffsetDateTime.now().plusMinutes(10),
+                "request-123",
+                originalFingerprint);
+
+        when(eventRepository.findByIdForUpdate(1L))
+                .thenReturn(Optional.of(event));
+
+        when(reservationRepository
+                .findByEvent_IdAndIdempotencyKey(
+                        1L,
+                        "request-123"))
+                .thenReturn(Optional.of(existing));
+
+        CreateReservationRequest differentRequest =
+                new CreateReservationRequest(
+                        "Different Student",
+                        "different@example.com");
+
+        assertThatThrownBy(
+                () -> reservationService.createHold(
+                        1L,
+                        "request-123",
+                        differentRequest))
+                .isInstanceOf(IdempotencyConflictException.class)
+                .hasMessage(
+                        "Idempotency key was already used with a different request.");
+
+        assertThat(event.getRemainingCapacity())
+                .isEqualTo(9);
+
+        verify(reservationRepository, never())
+                .save(any(Reservation.class));
     }
 }

@@ -125,4 +125,41 @@ class ReservationRepositoryTests {
                 () -> reservationRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void findsReservationByEventAndIdempotencyKey() {
+        OffsetDateTime now =
+                OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
+
+        Event event = eventRepository.saveAndFlush(new Event(
+                "Idempotency Workshop",
+                null,
+                "UCSD",
+                now.plusDays(10),
+                now.minusDays(1),
+                20));
+
+        Reservation reservation = new Reservation(
+                event,
+                "Test Student",
+                "student@example.com",
+                now.plusMinutes(10),
+                "request-abc-123",
+                "a".repeat(64));
+
+        Reservation saved =
+                reservationRepository.saveAndFlush(reservation);
+
+        Reservation found = reservationRepository
+                .findByEvent_IdAndIdempotencyKey(
+                        event.getId(),
+                        "request-abc-123")
+                .orElseThrow();
+
+        assertThat(found.getId()).isEqualTo(saved.getId());
+        assertThat(found.getIdempotencyKey())
+                .isEqualTo("request-abc-123");
+        assertThat(found.getRequestFingerprint())
+                .isEqualTo("a".repeat(64));
+    }
 }
