@@ -6,7 +6,11 @@ Students can discover official campus events while organizations can create and 
 
 ## Current Status
 
-Project foundation in progress.
+Event and reservation API with PostgreSQL persistence, concurrency-safe and
+idempotent reservation creation, Redis event caching, and Kafka reservation
+lifecycle events delivered through a transactional outbox. Delivery is
+at-least-once with database-backed idempotent consumer processing, bounded
+retry, and dead-letter handling.
 
 ## Planned Stack
 
@@ -41,4 +45,8 @@ events to a PostgreSQL transactional outbox. A background publisher delivers
 them to `campusreserve.reservation.lifecycle.v1` after the database transaction
 commits. Kafka may receive an event immediately before the process fails to
 persist `published_at`, so the same stable outbox event ID can be delivered
-again later. CRV-010 will make consumers idempotent and add retry/DLT behavior.
+again later. CampusReserve uses at-least-once delivery with database-backed,
+idempotent consumer processing; it does not claim Kafka exactly-once semantics.
+Consumer failures are retried twice with a 250 ms backoff, then routed to
+`campusreserve.reservation.lifecycle.v1.dlt` with the original record headers
+and failure metadata for logging visibility.
