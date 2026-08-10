@@ -9,6 +9,8 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEvent;
+import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEventPublisher;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,14 +28,17 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final EventRepository eventRepository;
     private final EventCache eventCache;
+    private final ReservationLifecycleEventPublisher eventPublisher;
 
     public ReservationService(
             ReservationRepository reservationRepository,
             EventRepository eventRepository,
-            EventCache eventCache) {
+            EventCache eventCache,
+            ReservationLifecycleEventPublisher eventPublisher) {
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
         this.eventCache = eventCache;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -123,6 +128,7 @@ public class ReservationService {
                 reservationRepository.save(reservation);
 
         evictEventCache(eventId);
+        publish(ReservationLifecycleEvent.holdCreated(saved, now));
 
         return ReservationResponse.from(saved);
     }
@@ -149,6 +155,9 @@ public class ReservationService {
         }
 
         reservation.confirm();
+        publish(ReservationLifecycleEvent.confirmed(
+                reservation,
+                OffsetDateTime.now()));
 
         return ReservationResponse.from(reservation);
     }
@@ -162,6 +171,9 @@ public class ReservationService {
         reservation.cancel();
         reservation.getEvent().releaseSpot();
         evictEventCache(reservation.getEvent().getId());
+        publish(ReservationLifecycleEvent.cancelled(
+                reservation,
+                OffsetDateTime.now()));
 
         return ReservationResponse.from(reservation);
     }
@@ -172,5 +184,11 @@ public class ReservationService {
         } catch (RuntimeException exception) {
             // PostgreSQL has already applied the reservation change.
         }
+    }
+
+    private void publish(ReservationLifecycleEvent event) {
+        // CRV-008 publishes directly alongside database work. CRV-009 will
+        // replace this dual-write failure window with a transactional outbox.
+        eventPublisher.publish(event);
     }
 }
