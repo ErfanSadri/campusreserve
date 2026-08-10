@@ -36,8 +36,9 @@ cd apps/reservation-api
 
 ## Kafka lifecycle events
 
-Reservation hold creation, confirmation, and cancellation publish versioned
-events to `campusreserve.reservation.lifecycle.v1`. In this milestone the
-application writes PostgreSQL state and publishes Kafka events directly, which
-leaves a dual-write failure window. CRV-009 will address that gap with a
-transactional outbox.
+Reservation hold creation, confirmation, and cancellation write versioned
+events to a PostgreSQL transactional outbox. A background publisher delivers
+them to `campusreserve.reservation.lifecycle.v1` after the database transaction
+commits. Kafka may receive an event immediately before the process fails to
+persist `published_at`, so the same stable outbox event ID can be delivered
+again later. CRV-010 will make consumers idempotent and add retry/DLT behavior.
