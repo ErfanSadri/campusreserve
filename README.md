@@ -32,3 +32,12 @@ Run tests:
 ```bash
 cd apps/reservation-api
 ./mvnw test
+```
+
+## Kafka lifecycle events
+
+Reservation hold creation, confirmation, and cancellation publish versioned
+events to `campusreserve.reservation.lifecycle.v1`. In this milestone the
+application writes PostgreSQL state and publishes Kafka events directly, which
+leaves a dual-write failure window. CRV-009 will address that gap with a
+transactional outbox.
