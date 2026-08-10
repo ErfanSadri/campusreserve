@@ -120,6 +120,10 @@ class ReservationConcurrencyTests {
             executor.shutdownNow();
 
             jdbcTemplate.update(
+                    "DELETE FROM outbox_events WHERE aggregate_id IN (SELECT id FROM reservations WHERE event_id = ?)",
+                    eventId);
+
+            jdbcTemplate.update(
                     "DELETE FROM reservations WHERE event_id = ?",
                     eventId);
 
@@ -216,6 +220,10 @@ class ReservationConcurrencyTests {
             executor.shutdownNow();
 
             jdbcTemplate.update(
+                    "DELETE FROM outbox_events WHERE aggregate_id IN (SELECT id FROM reservations WHERE event_id = ?)",
+                    eventId);
+
+            jdbcTemplate.update(
                     "DELETE FROM reservations WHERE event_id = ?",
                     eventId);
 
@@ -283,6 +291,9 @@ class ReservationConcurrencyTests {
             assertThat(reloaded.getRemainingCapacity()).isZero();
         } finally {
             executor.shutdownNow();
+            jdbcTemplate.update(
+                    "DELETE FROM outbox_events WHERE aggregate_id IN (SELECT id FROM reservations WHERE event_id = ?)",
+                    eventId);
             jdbcTemplate.update("DELETE FROM reservations WHERE event_id = ?", eventId);
             jdbcTemplate.update("DELETE FROM events WHERE id = ?", eventId);
         }

@@ -14,7 +14,8 @@ public class ReservationLifecycleAuditConsumer {
     @KafkaListener(topics = ReservationLifecycleTopic.NAME)
     public void consume(ReservationLifecycleEvent event) {
         LOGGER.info(
-                "Received reservation lifecycle event type={} reservationId={} eventId={}",
+                "Received reservation lifecycle event outboxEventId={} type={} reservationId={} eventId={}",
+                event.outboxEventId(),
                 event.eventType(),
                 event.reservationId(),
                 event.eventId());

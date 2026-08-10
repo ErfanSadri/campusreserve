@@ -1,8 +1,11 @@
 package com.erfansadri.campusreserve.reservation.messaging;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import com.erfansadri.campusreserve.reservation.ReservationStatus;
 
@@ -25,6 +28,7 @@ class KafkaReservationLifecycleEventPublisherTests {
     @Test
     void publishesEventToVersionedLifecycleTopicUsingReservationIdAsKey() {
         ReservationLifecycleEvent event = new ReservationLifecycleEvent(
+                UUID.randomUUID(),
                 "reservation.hold.created",
                 "v1",
                 7L,
@@ -33,7 +37,12 @@ class KafkaReservationLifecycleEventPublisherTests {
                 "student@example.com",
                 OffsetDateTime.parse("2026-08-09T15:03:41-07:00"));
 
-        publisher.publish(event);
+        when(kafkaTemplate.send(
+                ReservationLifecycleTopic.NAME,
+                "19",
+                event)).thenReturn(CompletableFuture.completedFuture(null));
+
+        publisher.publish(event).join();
 
         verify(kafkaTemplate).send(
                 ReservationLifecycleTopic.NAME,

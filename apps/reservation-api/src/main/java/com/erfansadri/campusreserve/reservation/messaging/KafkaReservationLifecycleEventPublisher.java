@@ -1,5 +1,7 @@
 package com.erfansadri.campusreserve.reservation.messaging;
 
+import java.util.concurrent.CompletableFuture;
+
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,10 +18,11 @@ public class KafkaReservationLifecycleEventPublisher
     }
 
     @Override
-    public void publish(ReservationLifecycleEvent event) {
-        kafkaTemplate.send(
+    public CompletableFuture<Void> publish(ReservationLifecycleEvent event) {
+        return kafkaTemplate.send(
                 ReservationLifecycleTopic.NAME,
                 event.reservationId().toString(),
-                event);
+                event)
+                .thenApply(result -> null);
     }
 }

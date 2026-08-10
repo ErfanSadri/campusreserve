@@ -1,6 +1,7 @@
 package com.erfansadri.campusreserve.reservation;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,4 +16,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     Optional<Reservation> findByEvent_IdAndIdempotencyKey(
         Long eventId,
         String idempotencyKey);
+
+    List<Reservation> findByEvent_Id(Long eventId);
 }

@@ -16,8 +16,7 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
-import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEvent;
-import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEventPublisher;
+import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +38,7 @@ class ReservationServiceTests {
     private EventCache eventCache;
 
     @Mock
-    private ReservationLifecycleEventPublisher eventPublisher;
+    private OutboxEventRecorder outboxEventRecorder;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -92,18 +91,8 @@ class ReservationServiceTests {
         verify(reservationRepository).save(captor.capture());
         verify(eventCache).evict(1L);
 
-        ArgumentCaptor<ReservationLifecycleEvent> eventCaptor =
-                ArgumentCaptor.forClass(ReservationLifecycleEvent.class);
-        verify(eventPublisher).publish(eventCaptor.capture());
-
-        assertThat(eventCaptor.getValue().eventType())
-                .isEqualTo("reservation.hold.created");
-        assertThat(eventCaptor.getValue().eventVersion())
-                .isEqualTo("v1");
-        assertThat(eventCaptor.getValue().reservationStatus())
-                .isEqualTo(ReservationStatus.HELD);
-        assertThat(eventCaptor.getValue().attendeeEmail())
-                .isEqualTo("student@example.com");
+        verify(outboxEventRecorder).recordHoldCreated(
+                captor.capture(), any(OffsetDateTime.class));
 
         assertThat(captor.getValue().getAttendeeName())
                 .isEqualTo("Test Student");
@@ -314,16 +303,8 @@ class ReservationServiceTests {
 
         assertThat(event.getRemainingCapacity()).isEqualTo(9);
 
-        ArgumentCaptor<ReservationLifecycleEvent> eventCaptor =
-                ArgumentCaptor.forClass(ReservationLifecycleEvent.class);
-        verify(eventPublisher).publish(eventCaptor.capture());
-
-        assertThat(eventCaptor.getValue().eventType())
-                .isEqualTo("reservation.confirmed");
-        assertThat(eventCaptor.getValue().reservationStatus())
-                .isEqualTo(ReservationStatus.CONFIRMED);
-        assertThat(eventCaptor.getValue().attendeeEmail())
-                .isEqualTo("student@example.com");
+        verify(outboxEventRecorder).recordConfirmed(
+                eq(reservation), any(OffsetDateTime.class));
     }
 
     @Test
@@ -349,16 +330,8 @@ class ReservationServiceTests {
         assertThat(event.getRemainingCapacity()).isEqualTo(10);
 
         verify(eventCache).evict(event.getId());
-        ArgumentCaptor<ReservationLifecycleEvent> eventCaptor =
-                ArgumentCaptor.forClass(ReservationLifecycleEvent.class);
-        verify(eventPublisher).publish(eventCaptor.capture());
-
-        assertThat(eventCaptor.getValue().eventType())
-                .isEqualTo("reservation.cancelled");
-        assertThat(eventCaptor.getValue().reservationStatus())
-                .isEqualTo(ReservationStatus.CANCELLED);
-        assertThat(eventCaptor.getValue().attendeeEmail())
-                .isEqualTo("student@example.com");
+        verify(outboxEventRecorder).recordCancelled(
+                eq(reservation), any(OffsetDateTime.class));
     }
 
     @Test
@@ -443,7 +416,8 @@ class ReservationServiceTests {
         verify(reservationRepository, never())
                 .save(any(Reservation.class));
         verify(eventCache, never()).evict(any());
-        verify(eventPublisher, never()).publish(any());
+        verify(outboxEventRecorder, never())
+                .recordHoldCreated(any(), any());
     }
 
     @Test
