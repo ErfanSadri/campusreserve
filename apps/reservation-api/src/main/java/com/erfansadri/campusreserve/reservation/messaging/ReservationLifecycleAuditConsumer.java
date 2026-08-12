@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import com.erfansadri.campusreserve.messaging.IdempotentConsumerProcessor;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,15 +23,18 @@ public class ReservationLifecycleAuditConsumer {
             ReservationLifecycleAuditConsumer.class);
 
     private final IdempotentConsumerProcessor idempotentConsumerProcessor;
+    private final CampusReserveMetrics metrics;
 
     public ReservationLifecycleAuditConsumer(
-            IdempotentConsumerProcessor idempotentConsumerProcessor) {
+            IdempotentConsumerProcessor idempotentConsumerProcessor,
+            CampusReserveMetrics metrics) {
         this.idempotentConsumerProcessor = idempotentConsumerProcessor;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topics = ReservationLifecycleTopic.NAME)
     public void consume(ReservationLifecycleEvent event) {
-        idempotentConsumerProcessor.processOnce(
+        boolean processed = idempotentConsumerProcessor.processOnce(
                 CONSUMER_NAME,
                 event.outboxEventId(),
                 () -> LOGGER.info(
@@ -39,6 +43,11 @@ public class ReservationLifecycleAuditConsumer {
                         event.eventType(),
                         event.reservationId(),
                         event.eventId()));
+        if (processed) {
+            metrics.kafkaProcessed();
+        } else {
+            metrics.kafkaDuplicateSkipped();
+        }
     }
 
     @KafkaListener(
@@ -61,5 +70,6 @@ public class ReservationLifecycleAuditConsumer {
                 event.reservationId(),
                 originalTopic,
                 record.headers().toArray().length);
+        metrics.kafkaDltArrived();
     }
 }

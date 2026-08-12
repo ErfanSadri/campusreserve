@@ -15,7 +15,10 @@ import com.erfansadri.campusreserve.reservation.ReservationStatus;
 import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEvent;
 import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleEventPublisher;
 import com.erfansadri.campusreserve.reservation.messaging.ReservationLifecycleTopic;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
+import com.erfansadri.campusreserve.observability.CampusReserveObservations;
 
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,6 +34,9 @@ class OutboxPublisherTests {
     @Mock
     private ReservationLifecycleEventPublisher eventPublisher;
 
+    @Mock
+    private CampusReserveMetrics metrics;
+
     @Test
     void publishesPendingEventAndMarksItPublishedAfterAcknowledgement() {
         OutboxEventCodec codec = new OutboxEventCodec();
@@ -39,7 +45,9 @@ class OutboxPublisherTests {
         OutboxPublisher publisher = new OutboxPublisher(
                 outboxEventRepository,
                 codec,
-                eventPublisher);
+                eventPublisher,
+                metrics,
+                new CampusReserveObservations(ObservationRegistry.NOOP));
 
         when(outboxEventRepository.findTop100ByPublishedAtIsNullOrderByCreatedAtAsc())
                 .thenReturn(List.of(outboxEvent));
@@ -56,6 +64,7 @@ class OutboxPublisherTests {
         assertThat(eventCaptor.getValue().occurredAt().toInstant())
                 .isEqualTo(event.occurredAt().toInstant());
         assertThat(outboxEvent.getPublishedAt()).isNotNull();
+        verify(metrics).outboxPublished();
     }
 
     @Test
@@ -66,7 +75,9 @@ class OutboxPublisherTests {
         OutboxPublisher publisher = new OutboxPublisher(
                 outboxEventRepository,
                 codec,
-                eventPublisher);
+                eventPublisher,
+                metrics,
+                new CampusReserveObservations(ObservationRegistry.NOOP));
 
         when(outboxEventRepository.findTop100ByPublishedAtIsNullOrderByCreatedAtAsc())
                 .thenReturn(List.of(outboxEvent));
@@ -77,6 +88,7 @@ class OutboxPublisherTests {
         publisher.publishPendingEvents();
 
         assertThat(outboxEvent.getPublishedAt()).isNull();
+        verify(metrics).outboxPublicationFailed();
     }
 
     @Test
@@ -84,7 +96,9 @@ class OutboxPublisherTests {
         OutboxPublisher publisher = new OutboxPublisher(
                 outboxEventRepository,
                 new OutboxEventCodec(),
-                eventPublisher);
+                eventPublisher,
+                metrics,
+                new CampusReserveObservations(ObservationRegistry.NOOP));
 
         when(outboxEventRepository.findTop100ByPublishedAtIsNullOrderByCreatedAtAsc())
                 .thenReturn(List.of());
