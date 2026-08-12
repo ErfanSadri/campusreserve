@@ -5,6 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 require_command curl
 require_command docker
+require_command jq
 postgres_stopped=false
 restore_postgres() {
   if [[ "$postgres_stopped" == true ]]; then
@@ -20,8 +21,10 @@ echo "Stopping CampusReserve PostgreSQL only..."
 postgres_stopped=true
 
 readiness_status=""
-for ((i = 1; i <= 45; i++)); do
-  readiness_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$BASE_URL/actuator/health/readiness" || true)
+for ((i = 1; i <= 3; i++)); do
+  # The datasource health check can wait for Hikari's connection timeout before
+  # returning DOWN, so let each bounded probe complete instead of aborting it.
+  readiness_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 35 "$BASE_URL/actuator/health/readiness" || true)
   [[ "$readiness_status" == 503 ]] && break
   sleep 1
 done

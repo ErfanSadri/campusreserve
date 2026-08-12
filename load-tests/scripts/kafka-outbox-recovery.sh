@@ -5,6 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 require_command curl
 require_command docker
+require_command jq
 kafka_stopped=false
 restore_kafka() {
   if [[ "$kafka_stopped" == true ]]; then

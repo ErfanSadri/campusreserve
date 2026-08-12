@@ -5,6 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 require_command curl
 require_command docker
+require_command jq
 redis_stopped=false
 restore_redis() {
   if [[ "$redis_stopped" == true ]]; then
@@ -24,9 +25,11 @@ echo "Stopping CampusReserve Redis only..."
 redis_stopped=true
 
 curl -fsS "$BASE_URL/api/events/$event_id" >/dev/null
-[[ $(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/actuator/health/readiness") == 200 ]]
+readiness_status=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/actuator/health/readiness" || true)
+[[ "$readiness_status" == 200 ]] || { echo "Expected readiness 200 while Redis is down, got $readiness_status" >&2; exit 1; }
 [[ $(create_reservation "$event_id" "redis-failure-$event_id" "redis-$event_id@failure.invalid") == 201 ]]
 dependencies_status=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/actuator/health/dependencies" || true)
+[[ "$dependencies_status" == 503 ]] || { echo "Expected dependencies health 503 while Redis is down, got $dependencies_status" >&2; exit 1; }
 echo "Redis down: event read and reservation succeeded; readiness=UP; dependencies HTTP status=$dependencies_status"
 
 "${COMPOSE[@]}" start redis >/dev/null
