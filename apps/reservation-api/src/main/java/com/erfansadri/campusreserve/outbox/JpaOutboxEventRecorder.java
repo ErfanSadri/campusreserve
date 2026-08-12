@@ -57,6 +57,17 @@ public class JpaOutboxEventRecorder implements OutboxEventRecorder {
                 occurredAt));
     }
 
+    @Override
+    public void recordExpired(
+            Reservation reservation,
+            OffsetDateTime occurredAt) {
+        UUID outboxEventId = UUID.randomUUID();
+        record(ReservationLifecycleEvent.expired(
+                outboxEventId,
+                reservation,
+                occurredAt));
+    }
+
     private void record(ReservationLifecycleEvent event) {
         outboxEventRepository.save(new OutboxEvent(
                 event.outboxEventId(),

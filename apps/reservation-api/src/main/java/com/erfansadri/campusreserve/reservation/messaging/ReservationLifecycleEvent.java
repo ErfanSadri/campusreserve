@@ -54,6 +54,18 @@ public record ReservationLifecycleEvent(
                 occurredAt);
     }
 
+    public static ReservationLifecycleEvent expired(
+            UUID outboxEventId,
+            Reservation reservation,
+            OffsetDateTime occurredAt) {
+
+        return from(
+                outboxEventId,
+                "reservation.expired",
+                reservation,
+                occurredAt);
+    }
+
     private static ReservationLifecycleEvent from(
             UUID outboxEventId,
             String eventType,

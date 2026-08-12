@@ -4,7 +4,6 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.kafka.autoconfigure.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
@@ -16,6 +15,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.util.backoff.FixedBackOff;
 
 @Configuration
+@EnableScheduling
 public class ReservationKafkaConfiguration {
 
     private static final long RETRY_BACKOFF_MILLIS = 250L;
@@ -69,13 +69,4 @@ public class ReservationKafkaConfiguration {
         factory.setCommonErrorHandler(reservationLifecycleErrorHandler);
         return factory;
     }
-}
-
-@Configuration
-@EnableScheduling
-@ConditionalOnProperty(
-        name = "campusreserve.outbox.publisher.enabled",
-        havingValue = "true",
-        matchIfMissing = true)
-class OutboxSchedulingConfiguration {
 }
