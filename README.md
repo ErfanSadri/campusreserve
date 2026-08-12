@@ -73,8 +73,10 @@ Spring Boot Actuator exposes `/actuator/health` and `/actuator/prometheus`.
 `/actuator/health/liveness` reports process liveness, while readiness is
 database-backed because PostgreSQL is the source of truth. The
 `/actuator/health/dependencies` group reports available dependency health
-contributors, including Redis and Kafka when configured; their failure does
-not make the database-backed reservation API unready.
+contributors such as the database and Redis; their failure does not make the
+database-backed reservation API unready. Kafka has no custom Actuator health
+contributor in this application. Its operational state is instead surfaced by
+outbox and messaging metrics, including failed publications and DLT arrivals.
 
 Prometheus metrics use the `campusreserve.*` namespace for successful
 reservation and waitlist transitions, outbox publishing, Kafka processing,

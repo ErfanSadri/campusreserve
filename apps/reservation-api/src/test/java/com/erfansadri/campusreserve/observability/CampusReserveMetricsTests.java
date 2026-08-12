@@ -2,7 +2,9 @@ package com.erfansadri.campusreserve.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 
 import org.junit.jupiter.api.Test;
 
@@ -37,14 +39,17 @@ class CampusReserveMetricsTests {
     }
 
     @Test
-    void recordsOutboxAndExpirationTimingAndCount() {
+    void recordsEachOutboxAndExpirationObservationAsOneTimerAndKeepsExpirationCount() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         CampusReserveMetrics metrics = new CampusReserveMetrics(registry);
+        ObservationRegistry observationRegistry = ObservationRegistry.create();
+        observationRegistry.observationConfig().observationHandler(
+                new DefaultMeterObservationHandler(registry));
+        CampusReserveObservations observations = new CampusReserveObservations(observationRegistry);
 
-        var batch = metrics.startOutboxBatch();
-        metrics.outboxBatchFinished(batch);
-        var expiration = metrics.startExpirationRun();
-        metrics.expirationRunFinished(expiration, 3);
+        observations.observeOutboxBatch(() -> { });
+        observations.observeExpirationRun(() -> 3);
+        metrics.expirationRunProcessed(3);
 
         assertThat(registry.get("campusreserve.outbox.publish.batch").timer().count())
                 .isEqualTo(1);

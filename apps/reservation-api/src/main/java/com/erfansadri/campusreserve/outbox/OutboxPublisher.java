@@ -46,26 +46,21 @@ public class OutboxPublisher {
     }
 
     private void publishPendingEventsInternal() {
-        var batch = metrics.startOutboxBatch();
-        try {
-            List<OutboxEvent> pendingEvents = outboxEventRepository
-                    .findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
+        List<OutboxEvent> pendingEvents = outboxEventRepository
+                .findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
 
-            for (OutboxEvent outboxEvent : pendingEvents) {
-                try {
-                    ReservationLifecycleEvent event = outboxEventCodec
-                            .deserialize(outboxEvent.getPayload());
-                    eventPublisher.publish(event).join();
-                    outboxEvent.markPublished(OffsetDateTime.now());
-                    metrics.outboxPublished();
-                } catch (RuntimeException exception) {
-                    // Leave this and later records pending for a future poll.
-                    metrics.outboxPublicationFailed();
-                    return;
-                }
+        for (OutboxEvent outboxEvent : pendingEvents) {
+            try {
+                ReservationLifecycleEvent event = outboxEventCodec
+                        .deserialize(outboxEvent.getPayload());
+                eventPublisher.publish(event).join();
+                outboxEvent.markPublished(OffsetDateTime.now());
+                metrics.outboxPublished();
+            } catch (RuntimeException exception) {
+                // Leave this and later records pending for a future poll.
+                metrics.outboxPublicationFailed();
+                return;
             }
-        } finally {
-            metrics.outboxBatchFinished(batch);
         }
     }
 }

@@ -52,7 +52,6 @@ public class ReservationExpirationProcessor {
     }
 
     private int expireOverdueHoldsInternal(OffsetDateTime now) {
-        var run = metrics.startExpirationRun();
         int expiredCount = 0;
         try {
             List<Reservation> overdueHolds = reservationRepository
@@ -79,7 +78,7 @@ public class ReservationExpirationProcessor {
 
             return expiredCount;
         } finally {
-            metrics.expirationRunFinished(run, expiredCount);
+            metrics.expirationRunProcessed(expiredCount);
         }
     }
 

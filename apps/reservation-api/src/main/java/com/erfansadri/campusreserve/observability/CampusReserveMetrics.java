@@ -22,8 +22,6 @@ public class CampusReserveMetrics {
     private final Counter kafkaDuplicatesSkipped;
     private final Counter kafkaDltArrivals;
     private final Timer holdCreationTimer;
-    private final Timer outboxBatchTimer;
-    private final Timer expirationRunTimer;
     private final DistributionSummary expirationProcessed;
 
     public CampusReserveMetrics(MeterRegistry registry) {
@@ -40,12 +38,6 @@ public class CampusReserveMetrics {
         kafkaDltArrivals = counter(registry, "campusreserve.kafka.lifecycle.dlt.arrivals");
         holdCreationTimer = Timer.builder("campusreserve.reservations.hold.creation")
                 .description("Time spent creating reservation holds")
-                .register(registry);
-        outboxBatchTimer = Timer.builder("campusreserve.outbox.publish.batch")
-                .description("Time spent polling and publishing outbox batches")
-                .register(registry);
-        expirationRunTimer = Timer.builder("campusreserve.expiration.run")
-                .description("Time spent processing an expiration batch")
                 .register(registry);
         expirationProcessed = DistributionSummary.builder("campusreserve.expiration.processed")
                 .description("Holds expired in each expiration worker run")
@@ -64,11 +56,7 @@ public class CampusReserveMetrics {
     public void kafkaProcessed() { kafkaProcessed.increment(); }
     public void kafkaDuplicateSkipped() { kafkaDuplicatesSkipped.increment(); }
     public void kafkaDltArrived() { kafkaDltArrivals.increment(); }
-    public Timer.Sample startOutboxBatch() { return Timer.start(); }
-    public void outboxBatchFinished(Timer.Sample sample) { sample.stop(outboxBatchTimer); }
-    public Timer.Sample startExpirationRun() { return Timer.start(); }
-    public void expirationRunFinished(Timer.Sample sample, int processed) {
-        sample.stop(expirationRunTimer);
+    public void expirationRunProcessed(int processed) {
         expirationProcessed.record(processed);
     }
 
