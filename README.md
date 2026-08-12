@@ -50,3 +50,19 @@ idempotent consumer processing; it does not claim Kafka exactly-once semantics.
 Consumer failures are retried twice with a 250 ms backoff, then routed to
 `campusreserve.reservation.lifecycle.v1.dlt` with the original record headers
 and failure metadata for logging visibility.
+
+## Hold expiration and waitlist promotion
+
+Overdue held reservations are processed in bounded batches using PostgreSQL
+row locks with `SKIP LOCKED`. Expiration changes the reservation to `EXPIRED`,
+releases its capacity, evicts the event cache, and records a
+`reservation.expired` outbox event in the same transaction. The oldest
+eligible waiting attendee is then promoted to one new ten-minute hold, with
+the usual `reservation.hold.created` outbox event. Promotion is serialized by
+the existing event row lock; Redis is not used for coordination.
+
+Students can join a waitlist only for a full event whose registration is open
+and whose start time has not passed. An attendee cannot have both an active
+reservation and an active waitlist entry for the same event. Waitlist entries
+are intentionally one-way in this milestone: there is no cancellation or
+position endpoint.

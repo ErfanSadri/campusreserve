@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReservationService {
 
-    private static final Duration HOLD_DURATION = Duration.ofMinutes(10);
+    public static final Duration HOLD_DURATION = Duration.ofMinutes(10);
 
     private static final List<ReservationStatus> ACTIVE_STATUSES =
             List.of(

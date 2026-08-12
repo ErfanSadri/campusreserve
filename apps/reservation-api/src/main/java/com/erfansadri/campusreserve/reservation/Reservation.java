@@ -164,4 +164,15 @@ public class Reservation {
         heldUntil = null;
         updatedAt = OffsetDateTime.now();
     }
+
+    public void expire() {
+        if (status != ReservationStatus.HELD) {
+            throw new InvalidReservationStateException(
+                    "Only held reservations can expire.");
+        }
+
+        status = ReservationStatus.EXPIRED;
+        heldUntil = null;
+        updatedAt = OffsetDateTime.now();
+    }
 }

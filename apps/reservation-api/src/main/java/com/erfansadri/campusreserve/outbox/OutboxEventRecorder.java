@@ -11,4 +11,6 @@ public interface OutboxEventRecorder {
     void recordConfirmed(Reservation reservation, OffsetDateTime occurredAt);
 
     void recordCancelled(Reservation reservation, OffsetDateTime occurredAt);
+
+    void recordExpired(Reservation reservation, OffsetDateTime occurredAt);
 }
