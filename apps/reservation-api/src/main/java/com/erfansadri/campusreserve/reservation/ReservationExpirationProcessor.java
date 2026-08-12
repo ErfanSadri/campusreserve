@@ -7,9 +7,6 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventRepository;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
-import com.erfansadri.campusreserve.waitlist.WaitlistEntry;
-import com.erfansadri.campusreserve.waitlist.WaitlistEntryRepository;
-import com.erfansadri.campusreserve.waitlist.WaitlistStatus;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -19,12 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReservationExpirationProcessor {
 
-    private static final List<ReservationStatus> ACTIVE_STATUSES =
-            List.of(ReservationStatus.HELD, ReservationStatus.CONFIRMED);
-
     private final ReservationRepository reservationRepository;
     private final EventRepository eventRepository;
-    private final WaitlistEntryRepository waitlistEntryRepository;
+    private final WaitlistPromotionService waitlistPromotionService;
     private final EventCache eventCache;
     private final OutboxEventRecorder outboxEventRecorder;
     private final int batchSize;
@@ -32,13 +26,13 @@ public class ReservationExpirationProcessor {
     public ReservationExpirationProcessor(
             ReservationRepository reservationRepository,
             EventRepository eventRepository,
-            WaitlistEntryRepository waitlistEntryRepository,
+            WaitlistPromotionService waitlistPromotionService,
             EventCache eventCache,
             OutboxEventRecorder outboxEventRecorder,
             @Value("${campusreserve.expiration.worker.batch-size}") int batchSize) {
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
-        this.waitlistEntryRepository = waitlistEntryRepository;
+        this.waitlistPromotionService = waitlistPromotionService;
         this.eventCache = eventCache;
         this.outboxEventRecorder = outboxEventRecorder;
         this.batchSize = batchSize;
@@ -64,40 +58,11 @@ public class ReservationExpirationProcessor {
             expiredCount++;
             event.releaseSpot();
             outboxEventRecorder.recordExpired(reservation, now);
-            promoteOldestEligibleWaiter(event, now);
+            waitlistPromotionService.promoteOldestEligibleWaiter(event, now);
             evictEventCache(event.getId());
         }
 
         return expiredCount;
-    }
-
-    private void promoteOldestEligibleWaiter(Event event, OffsetDateTime now) {
-        List<WaitlistEntry> waitingEntries = waitlistEntryRepository
-                .findByEvent_IdAndStatusOrderByCreatedAtAscIdAsc(
-                        event.getId(), WaitlistStatus.WAITING);
-
-        for (WaitlistEntry entry : waitingEntries) {
-            boolean alreadyReserved = reservationRepository
-                    .findByEvent_IdAndAttendeeEmailIgnoreCaseAndStatusIn(
-                            event.getId(), entry.getAttendeeEmail(), ACTIVE_STATUSES)
-                    .isPresent();
-            if (alreadyReserved) {
-                continue;
-            }
-
-            if (!event.hasAvailableCapacity()) {
-                return;
-            }
-            event.reserveSpot();
-            Reservation promotedReservation = reservationRepository.save(new Reservation(
-                    event,
-                    entry.getAttendeeName(),
-                    entry.getAttendeeEmail(),
-                    now.plus(ReservationService.HOLD_DURATION)));
-            entry.promote(promotedReservation, now);
-            outboxEventRecorder.recordHoldCreated(promotedReservation, now);
-            return;
-        }
     }
 
     private void evictEventCache(Long eventId) {

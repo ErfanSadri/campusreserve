@@ -28,16 +28,19 @@ public class ReservationService {
     private final EventRepository eventRepository;
     private final EventCache eventCache;
     private final OutboxEventRecorder outboxEventRecorder;
+    private final WaitlistPromotionService waitlistPromotionService;
 
     public ReservationService(
             ReservationRepository reservationRepository,
             EventRepository eventRepository,
             EventCache eventCache,
-            OutboxEventRecorder outboxEventRecorder) {
+            OutboxEventRecorder outboxEventRecorder,
+            WaitlistPromotionService waitlistPromotionService) {
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
         this.eventCache = eventCache;
         this.outboxEventRecorder = outboxEventRecorder;
+        this.waitlistPromotionService = waitlistPromotionService;
     }
 
     @Transactional
@@ -161,14 +164,18 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse cancelReservation(Long reservationId) {
-        Reservation reservation = reservationRepository.findById(reservationId)
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
                 .orElseThrow(
                         () -> new ReservationNotFoundException(reservationId));
 
+        Event event = eventRepository.findByIdForUpdate(reservation.getEvent().getId())
+                .orElseThrow();
+        OffsetDateTime now = OffsetDateTime.now();
         reservation.cancel();
-        reservation.getEvent().releaseSpot();
-        evictEventCache(reservation.getEvent().getId());
-        outboxEventRecorder.recordCancelled(reservation, OffsetDateTime.now());
+        event.releaseSpot();
+        outboxEventRecorder.recordCancelled(reservation, now);
+        waitlistPromotionService.promoteOldestEligibleWaiter(event, now);
+        evictEventCache(event.getId());
 
         return ReservationResponse.from(reservation);
     }

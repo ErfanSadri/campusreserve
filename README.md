@@ -54,10 +54,10 @@ and failure metadata for logging visibility.
 ## Hold expiration and waitlist promotion
 
 Overdue held reservations are processed in bounded batches using PostgreSQL
-row locks with `SKIP LOCKED`. Expiration changes the reservation to `EXPIRED`,
-releases its capacity, evicts the event cache, and records a
-`reservation.expired` outbox event in the same transaction. The oldest
-eligible waiting attendee is then promoted to one new ten-minute hold, with
+row locks with `SKIP LOCKED`. Expiration, and cancellation of an active
+reservation, release capacity, evict the event cache, and record their
+respective lifecycle outbox events in the same transaction. Each release then
+promotes the oldest eligible waiting attendee to one new ten-minute hold, with
 the usual `reservation.hold.created` outbox event. Promotion is serialized by
 the existing event row lock; Redis is not used for coordination.
 

@@ -15,15 +15,10 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventRepository;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
-import com.erfansadri.campusreserve.waitlist.WaitlistEntry;
-import com.erfansadri.campusreserve.waitlist.WaitlistEntryRepository;
-import com.erfansadri.campusreserve.waitlist.WaitlistStatus;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -33,7 +28,7 @@ class ReservationExpirationProcessorTests {
 
     @Mock private ReservationRepository reservationRepository;
     @Mock private EventRepository eventRepository;
-    @Mock private WaitlistEntryRepository waitlistEntryRepository;
+    @Mock private WaitlistPromotionService waitlistPromotionService;
     @Mock private EventCache eventCache;
     @Mock private OutboxEventRecorder outboxEventRecorder;
 
@@ -42,7 +37,7 @@ class ReservationExpirationProcessorTests {
     @BeforeEach
     void setUp() {
         expirationProcessor = new ReservationExpirationProcessor(
-                reservationRepository, eventRepository, waitlistEntryRepository,
+                reservationRepository, eventRepository, waitlistPromotionService,
                 eventCache, outboxEventRecorder, 100);
     }
 
@@ -60,8 +55,6 @@ class ReservationExpirationProcessorTests {
                 eq(ReservationStatus.HELD), eq(now), any()))
                 .thenReturn(List.of(hold));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
-        when(waitlistEntryRepository.findByEvent_IdAndStatusOrderByCreatedAtAscIdAsc(
-                eq(7L), eq(WaitlistStatus.WAITING))).thenReturn(List.of());
 
         assertThat(expirationProcessor.expireOverdueHolds(now)).isEqualTo(1);
 
@@ -73,39 +66,22 @@ class ReservationExpirationProcessorTests {
     }
 
     @Test
-    void promotesOldestEligibleWaiterToFreshHoldAndRecordsBothLifecycleEvents() {
+    void delegatesPromotionAfterExpirationWhileHoldingTheEventLock() {
         Event event = openEvent(1);
         setId(event, 7L);
         event.reserveSpot();
         Reservation hold = new Reservation(event, "Held", "held@example.com",
                 OffsetDateTime.now().minusMinutes(1));
         setId(hold, 11L);
-        WaitlistEntry first = new WaitlistEntry(event, "First", "first@example.com");
-        WaitlistEntry second = new WaitlistEntry(event, "Second", "second@example.com");
         OffsetDateTime now = OffsetDateTime.now();
 
         when(reservationRepository.findOverdueHoldsForUpdateSkipLocked(
                 eq(ReservationStatus.HELD), eq(now), any())).thenReturn(List.of(hold));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
-        when(waitlistEntryRepository.findByEvent_IdAndStatusOrderByCreatedAtAscIdAsc(
-                eq(7L), eq(WaitlistStatus.WAITING))).thenReturn(List.of(first, second));
-        when(reservationRepository.findByEvent_IdAndAttendeeEmailIgnoreCaseAndStatusIn(
-                eq(7L), eq("first@example.com"), any())).thenReturn(Optional.empty());
-        when(reservationRepository.save(any(Reservation.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         expirationProcessor.expireOverdueHolds(now);
 
-        ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
-        verify(reservationRepository).save(reservationCaptor.capture());
-        Reservation promoted = reservationCaptor.getValue();
-        assertThat(first.getStatus()).isEqualTo(WaitlistStatus.PROMOTED);
-        assertThat(first.getPromotedReservation()).isSameAs(promoted);
-        assertThat(second.getStatus()).isEqualTo(WaitlistStatus.WAITING);
-        assertThat(promoted.getHeldUntil()).isEqualTo(now.plusMinutes(10));
-        assertThat(event.getRemainingCapacity()).isZero();
         verify(outboxEventRecorder).recordExpired(hold, now);
-        verify(outboxEventRecorder).recordHoldCreated(promoted, now);
+        verify(waitlistPromotionService).promoteOldestEligibleWaiter(event, now);
     }
 
     @Test

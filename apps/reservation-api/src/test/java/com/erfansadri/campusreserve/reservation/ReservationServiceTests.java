@@ -40,6 +40,9 @@ class ReservationServiceTests {
     @Mock
     private OutboxEventRecorder outboxEventRecorder;
 
+    @Mock
+    private WaitlistPromotionService waitlistPromotionService;
+
     @InjectMocks
     private ReservationService reservationService;
 
@@ -318,8 +321,10 @@ class ReservationServiceTests {
                 "student@example.com",
                 OffsetDateTime.now().plusMinutes(10));
 
-        when(reservationRepository.findById(5L))
+        when(reservationRepository.findByIdForUpdate(5L))
                 .thenReturn(Optional.of(reservation));
+        when(eventRepository.findByIdForUpdate(event.getId()))
+                .thenReturn(Optional.of(event));
 
         ReservationResponse response =
                 reservationService.cancelReservation(5L);
@@ -332,6 +337,8 @@ class ReservationServiceTests {
         verify(eventCache).evict(event.getId());
         verify(outboxEventRecorder).recordCancelled(
                 eq(reservation), any(OffsetDateTime.class));
+        verify(waitlistPromotionService).promoteOldestEligibleWaiter(
+                eq(event), any(OffsetDateTime.class));
     }
 
     @Test
