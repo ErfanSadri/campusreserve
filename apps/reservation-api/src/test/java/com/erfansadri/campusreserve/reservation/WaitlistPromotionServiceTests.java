@@ -12,6 +12,7 @@ import java.util.Optional;
 
 import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.waitlist.WaitlistEntry;
 import com.erfansadri.campusreserve.waitlist.WaitlistEntryRepository;
 import com.erfansadri.campusreserve.waitlist.WaitlistStatus;
@@ -30,6 +31,7 @@ class WaitlistPromotionServiceTests {
     @Mock private WaitlistEntryRepository waitlistEntryRepository;
     @Mock private ReservationRepository reservationRepository;
     @Mock private OutboxEventRecorder outboxEventRecorder;
+    @Mock private CampusReserveMetrics metrics;
     @InjectMocks private WaitlistPromotionService promotionService;
 
     @Test
@@ -60,6 +62,7 @@ class WaitlistPromotionServiceTests {
         assertThat(eligible.getStatus()).isEqualTo(WaitlistStatus.PROMOTED);
         assertThat(event.getRemainingCapacity()).isZero();
         verify(outboxEventRecorder).recordHoldCreated(captor.getValue(), now);
+        verify(metrics).waitlistPromoted();
     }
 
     private Event openFullEvent() {

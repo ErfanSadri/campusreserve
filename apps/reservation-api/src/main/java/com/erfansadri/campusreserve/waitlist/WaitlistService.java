@@ -7,6 +7,7 @@ import java.util.Locale;
 import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.reservation.ReservationRepository;
 import com.erfansadri.campusreserve.reservation.ReservationStatus;
 
@@ -22,14 +23,17 @@ public class WaitlistService {
     private final WaitlistEntryRepository waitlistEntryRepository;
     private final ReservationRepository reservationRepository;
     private final EventRepository eventRepository;
+    private final CampusReserveMetrics metrics;
 
     public WaitlistService(
             WaitlistEntryRepository waitlistEntryRepository,
             ReservationRepository reservationRepository,
-            EventRepository eventRepository) {
+            EventRepository eventRepository,
+            CampusReserveMetrics metrics) {
         this.waitlistEntryRepository = waitlistEntryRepository;
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -67,6 +71,7 @@ public class WaitlistService {
 
         WaitlistEntry saved = waitlistEntryRepository.save(
                 new WaitlistEntry(event, normalizedName, normalizedEmail));
+        metrics.waitlistEntryCreated();
         return WaitlistEntryResponse.from(saved);
     }
 }

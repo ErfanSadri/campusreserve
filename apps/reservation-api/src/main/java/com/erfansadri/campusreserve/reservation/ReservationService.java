@@ -9,6 +9,7 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
 
 import org.springframework.stereotype.Service;
@@ -29,18 +30,21 @@ public class ReservationService {
     private final EventCache eventCache;
     private final OutboxEventRecorder outboxEventRecorder;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final CampusReserveMetrics metrics;
 
     public ReservationService(
             ReservationRepository reservationRepository,
             EventRepository eventRepository,
             EventCache eventCache,
             OutboxEventRecorder outboxEventRecorder,
-            WaitlistPromotionService waitlistPromotionService) {
+            WaitlistPromotionService waitlistPromotionService,
+            CampusReserveMetrics metrics) {
         this.reservationRepository = reservationRepository;
         this.eventRepository = eventRepository;
         this.eventCache = eventCache;
         this.outboxEventRecorder = outboxEventRecorder;
         this.waitlistPromotionService = waitlistPromotionService;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -49,6 +53,7 @@ public class ReservationService {
             String idempotencyKey,
             CreateReservationRequest request) {
 
+        var holdCreation = metrics.startHoldCreation();
         if (idempotencyKey == null
                 || idempotencyKey.trim().isEmpty()
                 || idempotencyKey.trim().length() > 128) {
@@ -131,6 +136,7 @@ public class ReservationService {
 
         evictEventCache(eventId);
         outboxEventRecorder.recordHoldCreated(saved, now);
+        metrics.holdCreated(holdCreation);
 
         return ReservationResponse.from(saved);
     }
@@ -158,6 +164,7 @@ public class ReservationService {
 
         reservation.confirm();
         outboxEventRecorder.recordConfirmed(reservation, OffsetDateTime.now());
+        metrics.reservationConfirmed();
 
         return ReservationResponse.from(reservation);
     }
@@ -176,6 +183,7 @@ public class ReservationService {
         outboxEventRecorder.recordCancelled(reservation, now);
         waitlistPromotionService.promoteOldestEligibleWaiter(event, now);
         evictEventCache(event.getId());
+        metrics.reservationCancelled();
 
         return ReservationResponse.from(reservation);
     }

@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.erfansadri.campusreserve.event.Event;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
 import com.erfansadri.campusreserve.waitlist.WaitlistEntry;
 import com.erfansadri.campusreserve.waitlist.WaitlistEntryRepository;
@@ -25,14 +26,17 @@ public class WaitlistPromotionService {
     private final WaitlistEntryRepository waitlistEntryRepository;
     private final ReservationRepository reservationRepository;
     private final OutboxEventRecorder outboxEventRecorder;
+    private final CampusReserveMetrics metrics;
 
     public WaitlistPromotionService(
             WaitlistEntryRepository waitlistEntryRepository,
             ReservationRepository reservationRepository,
-            OutboxEventRecorder outboxEventRecorder) {
+            OutboxEventRecorder outboxEventRecorder,
+            CampusReserveMetrics metrics) {
         this.waitlistEntryRepository = waitlistEntryRepository;
         this.reservationRepository = reservationRepository;
         this.outboxEventRecorder = outboxEventRecorder;
+        this.metrics = metrics;
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -61,6 +65,7 @@ public class WaitlistPromotionService {
                     now.plus(ReservationService.HOLD_DURATION)));
             entry.promote(promotedReservation, now);
             outboxEventRecorder.recordHoldCreated(promotedReservation, now);
+            metrics.waitlistPromoted();
             return;
         }
     }

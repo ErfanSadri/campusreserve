@@ -14,8 +14,11 @@ import java.util.Optional;
 import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
+import com.erfansadri.campusreserve.observability.CampusReserveObservations;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
 
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +34,7 @@ class ReservationExpirationProcessorTests {
     @Mock private WaitlistPromotionService waitlistPromotionService;
     @Mock private EventCache eventCache;
     @Mock private OutboxEventRecorder outboxEventRecorder;
+    @Mock private CampusReserveMetrics metrics;
 
     private ReservationExpirationProcessor expirationProcessor;
 
@@ -38,7 +42,8 @@ class ReservationExpirationProcessorTests {
     void setUp() {
         expirationProcessor = new ReservationExpirationProcessor(
                 reservationRepository, eventRepository, waitlistPromotionService,
-                eventCache, outboxEventRecorder, 100);
+                eventCache, outboxEventRecorder, 100, metrics,
+                new CampusReserveObservations(ObservationRegistry.NOOP));
     }
 
     @Test
@@ -63,6 +68,7 @@ class ReservationExpirationProcessorTests {
         assertThat(event.getRemainingCapacity()).isEqualTo(1);
         verify(outboxEventRecorder).recordExpired(hold, now);
         verify(eventCache).evict(7L);
+        verify(metrics).reservationExpired();
     }
 
     @Test

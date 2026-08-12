@@ -16,6 +16,7 @@ import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventCache;
 import com.erfansadri.campusreserve.event.EventNotFoundException;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.outbox.OutboxEventRecorder;
 
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,9 @@ class ReservationServiceTests {
 
     @Mock
     private WaitlistPromotionService waitlistPromotionService;
+
+    @Mock
+    private CampusReserveMetrics metrics;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -96,6 +100,7 @@ class ReservationServiceTests {
 
         verify(outboxEventRecorder).recordHoldCreated(
                 captor.capture(), any(OffsetDateTime.class));
+        verify(metrics).holdCreated(any());
 
         assertThat(captor.getValue().getAttendeeName())
                 .isEqualTo("Test Student");
@@ -308,6 +313,7 @@ class ReservationServiceTests {
 
         verify(outboxEventRecorder).recordConfirmed(
                 eq(reservation), any(OffsetDateTime.class));
+        verify(metrics).reservationConfirmed();
     }
 
     @Test
@@ -339,6 +345,7 @@ class ReservationServiceTests {
                 eq(reservation), any(OffsetDateTime.class));
         verify(waitlistPromotionService).promoteOldestEligibleWaiter(
                 eq(event), any(OffsetDateTime.class));
+        verify(metrics).reservationCancelled();
     }
 
     @Test

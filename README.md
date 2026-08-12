@@ -66,3 +66,20 @@ and whose start time has not passed. An attendee cannot have both an active
 reservation and an active waitlist entry for the same event. Waitlist entries
 are intentionally one-way in this milestone: there is no cancellation or
 position endpoint.
+
+## Observability
+
+Spring Boot Actuator exposes `/actuator/health` and `/actuator/prometheus`.
+`/actuator/health/liveness` reports process liveness, while readiness is
+database-backed because PostgreSQL is the source of truth. The
+`/actuator/health/dependencies` group reports available dependency health
+contributors, including Redis and Kafka when configured; their failure does
+not make the database-backed reservation API unready.
+
+Prometheus metrics use the `campusreserve.*` namespace for successful
+reservation and waitlist transitions, outbox publishing, Kafka processing,
+duplicates, DLT arrivals, and hold/outbox/expiration timing. HTTP requests
+accept a bounded `X-Correlation-ID` or generate one, return it in the response,
+and include it in logs. Tracing uses Spring Boot's OpenTelemetry support with
+OTLP export disabled locally by default; set `CAMPUSRESERVE_OTLP_ENABLED=true`
+and `CAMPUSRESERVE_OTLP_ENDPOINT` to enable a standard OTLP collector.

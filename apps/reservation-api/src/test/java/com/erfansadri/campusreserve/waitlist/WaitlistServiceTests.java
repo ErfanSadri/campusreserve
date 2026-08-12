@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import com.erfansadri.campusreserve.event.Event;
 import com.erfansadri.campusreserve.event.EventRepository;
+import com.erfansadri.campusreserve.observability.CampusReserveMetrics;
 import com.erfansadri.campusreserve.reservation.Reservation;
 import com.erfansadri.campusreserve.reservation.ReservationRepository;
 
@@ -28,6 +29,7 @@ class WaitlistServiceTests {
     @Mock private WaitlistEntryRepository waitlistEntryRepository;
     @Mock private ReservationRepository reservationRepository;
     @Mock private EventRepository eventRepository;
+    @Mock private CampusReserveMetrics metrics;
     @InjectMocks private WaitlistService waitlistService;
 
     @Test
@@ -48,6 +50,7 @@ class WaitlistServiceTests {
         assertThat(response.attendeeName()).isEqualTo("Student");
         assertThat(response.attendeeEmail()).isEqualTo("student@example.com");
         assertThat(response.status()).isEqualTo(WaitlistStatus.WAITING);
+        verify(metrics).waitlistEntryCreated();
     }
 
     @Test
