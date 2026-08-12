@@ -38,6 +38,13 @@ cd apps/reservation-api
 ./mvnw test
 ```
 
+## Local load and failure testing
+
+Reproducible k6 scenarios and local dependency-failure harnesses are in
+[`load-tests/`](load-tests/README.md). Measured local-development results and
+their environment are recorded in
+[`docs/06-performance-and-failure-testing.md`](docs/06-performance-and-failure-testing.md).
+
 ## Kafka lifecycle events
 
 Reservation hold creation, confirmation, and cancellation write versioned
