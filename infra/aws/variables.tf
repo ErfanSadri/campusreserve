@@ -51,6 +51,10 @@ variable "msk_broker_instance_type" {
   type    = string
   default = "kafka.t3.small"
 }
+variable "msk_kafka_version" {
+  type    = string
+  default = "3.9.x"
+}
 variable "msk_ebs_volume_size_gb" {
   type    = number
   default = 10

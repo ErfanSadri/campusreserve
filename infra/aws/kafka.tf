@@ -1,6 +1,6 @@
 resource "aws_msk_configuration" "this" {
   name              = "${local.name_prefix}-kafka"
-  kafka_versions    = ["3.7.x"]
+  kafka_versions    = [var.msk_kafka_version]
   server_properties = <<-PROPERTIES
     auto.create.topics.enable=true
     default.replication.factor=2
@@ -11,7 +11,7 @@ resource "aws_msk_configuration" "this" {
 
 resource "aws_msk_cluster" "this" {
   cluster_name           = "${local.name_prefix}-kafka"
-  kafka_version          = "3.7.x"
+  kafka_version          = var.msk_kafka_version
   number_of_broker_nodes = 2
 
   broker_node_group_info {

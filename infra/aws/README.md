@@ -26,9 +26,9 @@ required data service. One NAT Gateway is intentionally shared by both app
 subnets to reduce demo cost, sacrificing NAT AZ resilience.
 
 The design uses one ECS task, single-AZ RDS, one Redis node, and two small MSK
-brokers. There are no replicas, RDS Multi-AZ, autoscaling, WAF, custom domain,
-managed Grafana, or managed Prometheus. These are intentional demo cost/HA
-tradeoffs, not production recommendations.
+brokers running Kafka 3.9.x. There are no replicas, RDS Multi-AZ, autoscaling,
+WAF, custom domain, managed Grafana, or managed Prometheus. These are
+intentional demo cost/HA tradeoffs, not production recommendations.
 
 RDS manages its master password in Secrets Manager. Redis uses a generated
 AUTH token stored in Secrets Manager; because the generated value is also in
@@ -80,8 +80,8 @@ terraform apply -var='state_bucket_name=unique-name-here'
 ### C. Main stack bootstrap
 
 Copy `backend.hcl.example` to the ignored `backend.hcl` and replace its bucket
-placeholder. Copy `terraform.tfvars.example` to an ignored `.tfvars` file.
-For the first stack apply, keep `ecs_desired_count = 0`: ECR has no image yet.
+placeholder. Copy `terraform.tfvars.example` to an ignored `.tfvars` file, and
+keep `ecs_desired_count = 0` for this first deployment: ECR has no image yet.
 
 ```bash
 cd infra/aws
@@ -91,14 +91,23 @@ terraform validate
 terraform plan -var-file=demo.tfvars
 ```
 
-Use an RDS engine version only after verifying it is available in the chosen
-region. The default leaves it to RDS rather than claiming PostgreSQL 18 is
-available everywhere.
+Carefully review that plan, the selected AWS account and region, and current
+AWS pricing. Only then manually run:
+
+```bash
+terraform apply -var-file=demo.tfvars
+```
+
+This first apply creates the AWS infrastructure, including the ECR repository,
+but starts zero ECS tasks because the API image has not been pushed yet. AWS
+resources become billable after this apply. Use an RDS engine version only
+after verifying it is available in the chosen region. The default leaves it to
+RDS rather than claiming PostgreSQL 18 is available everywhere.
 
 ### D. Push an immutable ECR image
 
-After ECR exists, authenticate, build the existing CRV-014 Dockerfile, and
-push a Git commit SHA tag (not only `latest`):
+After the first apply creates ECR, authenticate, build the existing CRV-014
+Dockerfile, and push a Git commit SHA tag (not only `latest`):
 
 ```bash
 AWS_REGION=us-east-1
@@ -112,9 +121,16 @@ docker push "$IMAGE:$IMAGE_TAG"
 
 ### E. Start the application
 
-Set `container_image_tag` to the pushed immutable SHA and
-`ecs_desired_count = 1`, then review and apply the plan manually. Wait for ECS
-service stability and a healthy ALB target.
+Set `container_image_tag` to that pushed immutable SHA and
+`ecs_desired_count = 1`, then run and review a second plan before manually
+applying it:
+
+```bash
+terraform plan -var-file=demo.tfvars
+terraform apply -var-file=demo.tfvars
+```
+
+Wait for ECS service stability and a healthy ALB target.
 
 ### F. Smoke validation
 

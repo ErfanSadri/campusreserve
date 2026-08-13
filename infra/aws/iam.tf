@@ -34,7 +34,7 @@ resource "aws_iam_role" "ecs_task" {
 }
 data "aws_iam_policy_document" "msk_data_plane" {
   statement {
-    actions   = ["kafka-cluster:Connect", "kafka-cluster:DescribeCluster"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:DescribeCluster", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.this.arn]
   }
   statement {

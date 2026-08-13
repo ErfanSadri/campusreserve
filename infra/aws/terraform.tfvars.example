@@ -8,6 +8,9 @@ container_image_tag = "replace-with-git-commit-sha"
 # Confirm PostgreSQL 18 availability in the chosen region before uncommenting.
 # rds_engine_version = "18"
 
+# MSK defaults to Kafka 3.9.x. Override only after confirming regional support.
+# msk_kafka_version = "3.9.x"
+
 # Optional alert only; it is not a spending cap.
 # Set both values to opt into a monthly AWS Budget alert.
 # budget_alert_email = "you@example.com"
