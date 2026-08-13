@@ -38,6 +38,26 @@ cd apps/reservation-api
 ./mvnw test
 ```
 
+## CI and container image
+
+GitHub Actions runs for pull requests targeting `main` and pushes to `main`.
+It uses Java 21, validates the Compose and local harness configuration, starts
+the repository's PostgreSQL, Redis, and Kafka services, runs the full Maven
+verification, builds the API image, and checks its database-backed readiness.
+On a successful trusted push to `main`, it publishes
+`ghcr.io/<repository-owner>/campusreserve-reservation-api` with immutable
+commit-SHA and `main` tags. Pull requests never publish images.
+
+Build the same production-oriented image locally from the repository root:
+
+```bash
+docker build -t campusreserve/reservation-api:local apps/reservation-api
+```
+
+Runtime PostgreSQL, Redis, Kafka, and OTLP settings remain environment
+variables; no credentials are included in the image. AWS deployment is
+deferred to CRV-015.
+
 ## Local load and failure testing
 
 Reproducible k6 scenarios and local dependency-failure harnesses are in
