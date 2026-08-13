@@ -1,129 +1,179 @@
 # CampusReserve
 
-CampusReserve is a university-focused event discovery and registration platform.
+CampusReserve is a backend-focused event registration system for limited-capacity
+university events. It demonstrates how to keep reservations correct when many
+people reserve, cancel, retry, and join a waitlist at the same time.
 
-Students can discover official campus events while organizations can create and share their own limited-capacity events with reservations and waitlists.
+**Java 21 · Spring Boot · PostgreSQL · Redis · Kafka · Docker · OpenTelemetry · Prometheus · k6 · Terraform · AWS · GitHub Actions**
 
-## Current Status
+Campus events are the product context; the implemented application provides an
+event, reservation, and waitlist API. It does not ingest events from official
+campus systems.
 
-Event and reservation API with PostgreSQL persistence, concurrency-safe and
-idempotent reservation creation, Redis event caching, and Kafka reservation
-lifecycle events delivered through a transactional outbox. Delivery is
-at-least-once with database-backed idempotent consumer processing, bounded
-retry, and dead-letter handling.
+## Why CampusReserve
 
-## Planned Stack
+A limited-capacity event looks simple until concurrent requests, temporary
+holds, cancellations, waitlists, and asynchronous notifications interact.
+CampusReserve keeps PostgreSQL authoritative for capacity and reservation state
+while treating caching and messaging as supporting concerns rather than sources
+of correctness.
 
-- Java
-- Spring Boot
-- PostgreSQL
-- Redis
-- Apache Kafka
-- Docker
-- AWS
-- Terraform
+## Architecture
 
-## Applications
+```mermaid
+flowchart LR
+  Client --> API[Spring Boot API]
+  API --> PG[(PostgreSQL\nsource of truth)]
+  API <--> Redis[(Redis\ncache-aside)]
+  PG --> Outbox[Transactional outbox]
+  Outbox --> Kafka[Kafka lifecycle topic]
+  Kafka --> Consumer[Idempotent audit consumer]
+  Kafka -. failed processing: retry exhausted .-> DLT[Dead-letter topic]
+```
 
-- `reservation-api` — HTTP API for events and reservations
+- PostgreSQL row locking serializes capacity changes; Redis is an event-read
+  cache only and is never used for reservation locking.
+- Reservation mutations write lifecycle events to a PostgreSQL outbox in the
+  same transaction. Kafka downtime leaves durable pending work instead of
+  failing the reservation transaction.
+- Kafka delivery is **at-least-once**, not exactly-once. The audit consumer
+  stores processed event IDs in PostgreSQL, so duplicate deliveries do not
+  repeat its side effect; bounded retries route exhausted records to a DLT.
+- Expiration and waitlist work run in bounded batches and use `SKIP LOCKED`
+  where implemented to avoid competing workers processing the same rows.
 
-Additional services will be introduced only when required by the application architecture.
+## Key engineering features
 
-## Development
+- Pessimistic PostgreSQL locking prevents overbooking under concurrent holds.
+- `Idempotency-Key` protects reservation creation from retry-induced duplicate
+  capacity consumption and rejects conflicting key reuse.
+- Reservation lifecycle: `HELD`, `CONFIRMED`, `CANCELLED`, and `EXPIRED`.
+- Ten-minute holds, FIFO waitlist promotion, and active-reservation eligibility
+  checks on capacity release.
+- Redis cache-aside event reads with PostgreSQL fallback and targeted cache
+  invalidation after capacity changes.
+- Transactional outbox, stable event IDs, Kafka retries/DLT, and database-backed
+  consumer idempotency.
+- Actuator health/Prometheus metrics, correlation IDs, and optional OTLP tracing.
+- Dockerized local dependencies, GitHub Actions verification, and immutable
+  commit-SHA container publishing to GHCR on trusted `main` pushes.
+- Terraform defines a cost-conscious AWS demo topology without claiming a
+  running application deployment.
 
-Run tests:
+## Verified local-development results
+
+These are local-development measurements, not production benchmarks.
+
+- **Capacity correctness:** 500 simultaneous attempts for an event with capacity
+  100 produced exactly 100 holds, 400 expected capacity rejections, remaining
+  capacity 0, and no overbooking.
+- **Idempotency correctness:** 100 concurrent identical requests with one key
+  resulted in one reservation and one capacity decrement.
+- **Event reads:** 7,627 requests at 331.30 req/s with p95 8.35 ms and zero
+  HTTP failures.
+- **Mixed workload:** 3,865 requests at 256.29 req/s with p95 20.85 ms and
+  zero HTTP failures.
+- **Failure exercises:** Redis outage fell back to PostgreSQL; Kafka outage
+  allowed the reservation to commit with a pending outbox record that recovered
+  after Kafka returned; PostgreSQL outage made readiness fail and prevented
+  normal database-backed writes until recovery.
+
+See [the methodology and full local results](docs/06-performance-and-failure-testing.md).
+
+## Reservation flow
+
+1. Create an event with `POST /api/events`.
+2. Create a hold with `POST /api/events/{eventId}/reservations` and an
+   `Idempotency-Key` header.
+3. Confirm with `POST /api/reservations/{reservationId}/confirm`, or cancel
+   with `POST /api/reservations/{reservationId}/cancel`.
+4. Cancellation or expiration releases capacity and promotes the oldest eligible
+   waiting attendee when one exists. Waitlist entry is
+   `POST /api/events/{eventId}/waitlist`.
+
+Useful reads are `GET /api/events`, `GET /api/events/{id}`,
+`GET /api/reservations/{reservationId}`, and `GET /api`.
+
+## Quick start
+
+Prerequisites: Java 21, Docker Desktop/Compose, and a local checkout.
+
+```bash
+docker compose up -d postgres redis kafka
+cd apps/reservation-api
+./mvnw spring-boot:run
+```
+
+In another terminal, confirm database-backed readiness and the API:
+
+```bash
+curl http://localhost:8080/actuator/health/readiness
+curl http://localhost:8080/api
+```
+
+The default local services are PostgreSQL on `5434`, Redis on `6380`, and Kafka
+on `9094`. Stop only the local dependencies when finished with
+`docker compose down` from the repository root.
+
+Run the full test suite:
 
 ```bash
 cd apps/reservation-api
 ./mvnw test
 ```
 
-## CI and container image
+Load and dependency-failure harnesses are documented in
+[load-tests/README.md](load-tests/README.md). They operate on the local Compose
+services and do not represent production capacity tests.
 
-GitHub Actions runs for pull requests targeting `main` and pushes to `main`.
-It uses Java 21, validates the Compose and local harness configuration, starts
-the repository's PostgreSQL, Redis, and Kafka services, runs the full Maven
-verification, builds the API image, and checks its database-backed readiness.
-On a successful trusted push to `main`, it publishes
-`ghcr.io/<repository-owner>/campusreserve-reservation-api` with immutable
-commit-SHA and `main` tags. Pull requests never publish images.
+## Testing and CI
 
-Build the same production-oriented image locally from the repository root:
+The Maven suite covers API behavior, persistence, idempotency, locking and
+concurrency, cache fallback/invalidation, outbox publication, consumer
+deduplication/retry/DLT, expiration, and waitlist promotion. GitHub Actions
+validates Compose and harness syntax, starts PostgreSQL/Redis/Kafka, runs Maven
+verification, builds the production-oriented image, and smoke-checks its
+database-backed readiness. On trusted pushes to `main`, it publishes immutable
+commit-SHA and `main` tags to GHCR; pull requests never publish images.
+
+Build the same image locally:
 
 ```bash
 docker build -t campusreserve/reservation-api:local apps/reservation-api
 ```
 
-Runtime PostgreSQL, Redis, Kafka, and OTLP settings remain environment
-variables; no credentials are included in the image. AWS deployment is
-deferred to CRV-015.
+## AWS and Terraform
 
-## AWS demo deployment infrastructure
+Terraform defines the intended short-lived demo path:
+**ALB → ECS/Fargate → RDS PostgreSQL, ElastiCache Redis, and MSK Kafka**, plus
+ECR, Secrets Manager, IAM, CloudWatch, and private data services.
 
-CRV-015 adds Terraform for a manual, cost-conscious AWS demo topology:
-client → ALB → ECS/Fargate → RDS PostgreSQL, ElastiCache Redis, and MSK Kafka.
-It also defines ECR, Secrets Manager integration, IAM boundaries, and
-CloudWatch logs. Data services and API tasks are private; only the HTTP ALB is
-public. CI/CD from CRV-014 remains unchanged and AWS provisioning is not
-automatic. The stack is intentionally sized for a short-lived demonstration,
-not production HA. The remote-state bootstrap bucket has been deployed, and
-the main application stack has been successfully planned but remains
-intentionally unapplied: no RDS, Redis, MSK, ECS, ALB, or NAT resources are
-running. Applying it requires a billing/account-eligibility review; the current
-account cannot use MSK without an account-plan upgrade. See
-[the AWS infrastructure guide](infra/aws/README.md) before any future apply.
+- **Defined:** the topology and manual deployment runbook in Terraform.
+- **Validated/planned:** the main stack; its real plan contained 53 additions.
+- **Actually deployed:** only the encrypted, versioned, non-public remote-state
+  S3 bootstrap bucket.
 
-## Local load and failure testing
+The application stack was intentionally not applied: no RDS, Redis, MSK, ECS,
+ALB, or NAT Gateway is running. The validating Free-plan account could not use
+MSK without an account-plan upgrade, so work stopped before potentially paid
+deployment. A future operator must review billing, service eligibility, and the
+plan before any apply. See [AWS architecture status](docs/07-aws-deployment.md)
+and [the Terraform runbook](infra/aws/README.md).
 
-Reproducible k6 scenarios and local dependency-failure harnesses are in
-[`load-tests/`](load-tests/README.md). Measured local-development results and
-their environment are recorded in
-[`docs/06-performance-and-failure-testing.md`](docs/06-performance-and-failure-testing.md).
+## Repository guide
 
-## Kafka lifecycle events
+```text
+apps/reservation-api/  Spring Boot API, Flyway migrations, and tests
+load-tests/            k6 scenarios and local failure/recovery scripts
+docs/                  Performance/failure evidence and AWS deployment status
+infra/aws/             Terraform main stack, bootstrap, and manual runbook
+.github/workflows/     CI verification and GHCR publishing
+compose.yaml           Local PostgreSQL, Redis, and Kafka
+```
 
-Reservation hold creation, confirmation, and cancellation write versioned
-events to a PostgreSQL transactional outbox. A background publisher delivers
-them to `campusreserve.reservation.lifecycle.v1` after the database transaction
-commits. Kafka may receive an event immediately before the process fails to
-persist `published_at`, so the same stable outbox event ID can be delivered
-again later. CampusReserve uses at-least-once delivery with database-backed,
-idempotent consumer processing; it does not claim Kafka exactly-once semantics.
-Consumer failures are retried twice with a 250 ms backoff, then routed to
-`campusreserve.reservation.lifecycle.v1.dlt` with the original record headers
-and failure metadata for logging visibility.
+## Documentation
 
-## Hold expiration and waitlist promotion
-
-Overdue held reservations are processed in bounded batches using PostgreSQL
-row locks with `SKIP LOCKED`. Expiration, and cancellation of an active
-reservation, release capacity, evict the event cache, and record their
-respective lifecycle outbox events in the same transaction. Each release then
-promotes the oldest eligible waiting attendee to one new ten-minute hold, with
-the usual `reservation.hold.created` outbox event. Promotion is serialized by
-the existing event row lock; Redis is not used for coordination.
-
-Students can join a waitlist only for a full event whose registration is open
-and whose start time has not passed. An attendee cannot have both an active
-reservation and an active waitlist entry for the same event. Waitlist entries
-are intentionally one-way in this milestone: there is no cancellation or
-position endpoint.
-
-## Observability
-
-Spring Boot Actuator exposes `/actuator/health` and `/actuator/prometheus`.
-`/actuator/health/liveness` reports process liveness, while readiness is
-database-backed because PostgreSQL is the source of truth. The
-`/actuator/health/dependencies` group reports available dependency health
-contributors such as the database and Redis; their failure does not make the
-database-backed reservation API unready. Kafka has no custom Actuator health
-contributor in this application. Its operational state is instead surfaced by
-outbox and messaging metrics, including failed publications and DLT arrivals.
-
-Prometheus metrics use the `campusreserve.*` namespace for successful
-reservation and waitlist transitions, outbox publishing, Kafka processing,
-duplicates, DLT arrivals, and hold/outbox/expiration timing. HTTP requests
-accept a bounded `X-Correlation-ID` or generate one, return it in the response,
-and include it in logs. Tracing uses Spring Boot's OpenTelemetry support with
-OTLP export disabled locally by default; set `CAMPUSRESERVE_OTLP_ENABLED=true`
-and `CAMPUSRESERVE_OTLP_ENDPOINT` to enable a standard OTLP collector.
+- [Local performance and failure testing](docs/06-performance-and-failure-testing.md)
+- [AWS deployment architecture and current status](docs/07-aws-deployment.md)
+- [AWS Terraform runbook](infra/aws/README.md)
+- [Load-test and failure-harness usage](load-tests/README.md)
