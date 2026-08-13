@@ -153,6 +153,7 @@ terraform destroy -var-file=demo.tfvars
 ```
 
 Afterward check for remaining NAT Gateway, ALB, ECS tasks/service, RDS,
-ElastiCache, MSK, ECR images, and CloudWatch log retention. The RDS
+ElastiCache, MSK, and CloudWatch log retention. Terraform intentionally
+deletes this demo ECR repository and its images during teardown. The RDS
 `skip_final_snapshot` setting is demo-only and is not suitable for production
 data retention.
