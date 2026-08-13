@@ -66,8 +66,12 @@ It also defines ECR, Secrets Manager integration, IAM boundaries, and
 CloudWatch logs. Data services and API tasks are private; only the HTTP ALB is
 public. CI/CD from CRV-014 remains unchanged and AWS provisioning is not
 automatic. The stack is intentionally sized for a short-lived demonstration,
-not production HA, and has not been provisioned yet. See
-[the AWS infrastructure guide](infra/aws/README.md) before any apply.
+not production HA. The remote-state bootstrap bucket has been deployed, and
+the main application stack has been successfully planned but remains
+intentionally unapplied: no RDS, Redis, MSK, ECS, ALB, or NAT resources are
+running. Applying it requires a billing/account-eligibility review; the current
+account cannot use MSK without an account-plan upgrade. See
+[the AWS infrastructure guide](infra/aws/README.md) before any future apply.
 
 ## Local load and failure testing
 

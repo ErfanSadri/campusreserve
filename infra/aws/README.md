@@ -1,9 +1,16 @@
 # CampusReserve AWS demo infrastructure
 
 This directory defines a deliberately small, short-lived AWS demo environment.
-It is not provisioned by this repository yet. Review current AWS pricing and
-the Terraform plan before any apply; no cost estimate in this document should
-be inferred.
+The remote-state bootstrap bucket has been provisioned successfully; the main
+application stack has been validated and planned successfully but is not
+deployed. The plan would create 53 main-stack resources, but it was
+intentionally not applied because the validating account cannot use MSK without
+an account-plan upgrade and the environment is intended to avoid paid AWS use.
+No RDS, ElastiCache, MSK, ECS, ALB, NAT Gateway, or other main-stack
+application resources have been provisioned. PostgreSQL 18.3 availability was
+confirmed for `us-east-1`, but no RDS instance was created. Review current AWS
+pricing, account eligibility, and the Terraform plan before any future apply;
+no cost estimate in this document should be inferred.
 
 ## Architecture and tradeoffs
 
@@ -57,8 +64,9 @@ needs HTTPS and a custom domain.
 
 ### A. Prerequisites
 
-Install Terraform and AWS CLI, configure an AWS account and region, and review
-pricing. Confirm identity before any state-changing command:
+Install Terraform and AWS CLI, configure an AWS account and region, verify
+that the account is eligible for every selected service (including MSK), and
+review pricing. Confirm identity before any state-changing command:
 
 ```bash
 aws sts get-caller-identity
@@ -91,8 +99,8 @@ terraform validate
 terraform plan -var-file=demo.tfvars
 ```
 
-Carefully review that plan, the selected AWS account and region, and current
-AWS pricing. Only then manually run:
+Carefully review that plan, the selected AWS account and region, service
+eligibility, and current AWS pricing. Only then manually run:
 
 ```bash
 terraform apply -var-file=demo.tfvars
