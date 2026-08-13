@@ -8,3 +8,14 @@
 !.env.example
 
 **/target/
+
+# Terraform local state, backend settings, and generated plans can contain
+# infrastructure identifiers or secret material. Remote state is configured
+# separately and must be protected.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/aws/backend.hcl
+infra/aws/*.tfvars
+!infra/aws/terraform.tfvars.example

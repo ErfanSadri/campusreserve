@@ -58,6 +58,17 @@ Runtime PostgreSQL, Redis, Kafka, and OTLP settings remain environment
 variables; no credentials are included in the image. AWS deployment is
 deferred to CRV-015.
 
+## AWS demo deployment infrastructure
+
+CRV-015 adds Terraform for a manual, cost-conscious AWS demo topology:
+client → ALB → ECS/Fargate → RDS PostgreSQL, ElastiCache Redis, and MSK Kafka.
+It also defines ECR, Secrets Manager integration, IAM boundaries, and
+CloudWatch logs. Data services and API tasks are private; only the HTTP ALB is
+public. CI/CD from CRV-014 remains unchanged and AWS provisioning is not
+automatic. The stack is intentionally sized for a short-lived demonstration,
+not production HA, and has not been provisioned yet. See
+[the AWS infrastructure guide](infra/aws/README.md) before any apply.
+
 ## Local load and failure testing
 
 Reproducible k6 scenarios and local dependency-failure harnesses are in
