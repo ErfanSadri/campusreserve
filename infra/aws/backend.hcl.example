@@ -1,0 +1,6 @@
+# Copy to backend.hcl and replace the placeholder. Do not commit backend.hcl.
+bucket       = "replace-with-unique-campusreserve-tf-state-bucket"
+key          = "campusreserve/demo/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

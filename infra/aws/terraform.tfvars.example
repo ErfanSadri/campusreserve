@@ -1,0 +1,17 @@
+# Demo defaults. This file contains no secrets.
+aws_region          = "us-east-1"
+project_name        = "campusreserve"
+environment         = "demo"
+ecs_desired_count   = 0 # First apply only: push an immutable ECR image before setting this to 1.
+container_image_tag = "replace-with-git-commit-sha"
+
+# Confirm PostgreSQL 18 availability in the chosen region before uncommenting.
+# rds_engine_version = "18"
+
+# MSK defaults to Kafka 3.9.x. Override only after confirming regional support.
+# msk_kafka_version = "3.9.x"
+
+# Optional alert only; it is not a spending cap.
+# Set both values to opt into a monthly AWS Budget alert.
+# budget_alert_email = "you@example.com"
+# budget_limit_amount = 25
